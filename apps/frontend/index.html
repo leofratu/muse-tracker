@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MuseLSL Studio</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-left"></div>
+    <div class="ambient ambient-right"></div>
+    <main class="shell">
+      <section class="hero panel">
+        <div>
+          <p class="eyebrow">MuseLSL Studio</p>
+          <h1>Battery-aware brain-wave monitoring for Muse 1 and Muse 2.</h1>
+          <p class="hero-copy" id="connection-copy">
+            Waiting for the first stream snapshot.
+          </p>
+          <div class="hero-chips">
+            <span class="chip" id="status-chip">Booting</span>
+            <span class="chip chip-outline" id="source-chip">Source: starting</span>
+            <span class="chip chip-outline" id="model-chip">Profile: Muse 2</span>
+            <span class="chip chip-outline" id="version-chip">Version: detecting</span>
+          </div>
+        </div>
+        <div class="hero-callout">
+          <p class="callout-label">Live sample rate</p>
+          <div class="callout-value"><span id="sample-rate">0</span> Hz</div>
+          <p class="callout-note">Auto-falls back to a demo feed until MuseLSL comes online.</p>
+        </div>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel battery-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Battery tracker</p>
+              <h2>Keep an eye on headset endurance.</h2>
+            </div>
+            <div class="battery-value" id="battery-value">--%</div>
+          </div>
+          <div class="battery-bar-shell">
+            <div class="battery-bar-fill" id="battery-bar-fill"></div>
+          </div>
+          <div class="battery-meta">
+            <div>
+              <p class="meta-label">Battery state</p>
+              <p class="meta-value" id="battery-status">Unknown</p>
+            </div>
+            <div>
+              <p class="meta-label">Trend</p>
+              <p class="meta-value" id="battery-trend">Steady</p>
+            </div>
+            <div>
+              <p class="meta-label">Telemetry</p>
+              <p class="meta-value" id="battery-source">Awaiting feed</p>
+            </div>
+          </div>
+          <p class="panel-note" id="battery-note">
+            Muse 1 and Muse 2 battery state will appear here once telemetry arrives.
+          </p>
+        </article>
+
+        <article class="panel support-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Support map</p>
+              <h2>Muse hardware coverage</h2>
+            </div>
+          </div>
+          <div class="support-grid" id="support-grid"></div>
+        </article>
+      </section>
+
+      <section class="dashboard-grid fit-grid">
+        <article class="panel fit-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Sensor fit</p>
+              <h2>Skin contact estimate</h2>
+            </div>
+            <div class="fit-score" id="fit-score">0</div>
+          </div>
+          <p class="panel-note" id="fit-note">
+            Waiting for a signal window before estimating sensor contact.
+          </p>
+          <div class="fit-channel-grid" id="fit-channel-grid"></div>
+        </article>
+
+        <article class="panel version-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Version insight</p>
+              <h2>Detected headset version</h2>
+            </div>
+          </div>
+          <div class="version-copy">
+            <p class="version-name" id="version-name">Detecting...</p>
+            <p class="version-meta" id="version-confidence">Confidence: waiting</p>
+            <p class="version-meta" id="version-identity">Identity: unknown</p>
+          </div>
+          <ul class="version-evidence" id="version-evidence"></ul>
+        </article>
+      </section>
+
+      <section class="dashboard-grid fit-grid">
+        <article class="panel motion-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Head position</p>
+              <h2>Motion and tilt tracking</h2>
+            </div>
+            <div class="fit-score" id="motion-score">0</div>
+          </div>
+          <p class="panel-note" id="motion-note">Waiting for accelerometer and gyroscope data.</p>
+          <div class="fit-channel-grid" id="motion-grid"></div>
+        </article>
+
+        <article class="panel calibration-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Calibration coach</p>
+              <h2>Accuracy guidance</h2>
+            </div>
+            <div class="fit-score" id="calibration-score">0</div>
+          </div>
+          <p class="panel-note" id="calibration-note">Preparing guidance.</p>
+          <ul class="version-evidence" id="calibration-guide"></ul>
+        </article>
+      </section>
+
+      <section class="panel waveform-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Wave viewer</p>
+            <h2>Live EEG traces</h2>
+          </div>
+          <p class="panel-note">The plot uses the latest rolling EEG window from MuseLSL or the demo bridge.</p>
+        </div>
+        <canvas id="waveform-canvas"></canvas>
+      </section>
+
+      <section class="dashboard-grid trends-grid">
+        <article class="panel trend-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Timegraph</p>
+              <h2>Battery and fit over time</h2>
+            </div>
+            <p class="panel-note">Tracks the battery feed alongside the rolling skin-contact estimate.</p>
+          </div>
+          <canvas id="trend-canvas"></canvas>
+        </article>
+
+        <article class="panel trend-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Timegraph</p>
+              <h2>Band power drift</h2>
+            </div>
+            <p class="panel-note">Shows how alpha, beta, theta, delta, and gamma shift across the latest windows.</p>
+          </div>
+          <canvas id="band-trend-canvas"></canvas>
+        </article>
+      </section>
+
+      <section class="panel bands-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Brain-wave balance</p>
+            <h2>Band power mix</h2>
+          </div>
+          <p class="panel-note">Delta, theta, alpha, beta, and gamma are estimated from the incoming EEG window.</p>
+        </div>
+        <div class="bands-grid" id="bands-grid"></div>
+      </section>
+
+      <section class="panel moments-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Signal health</p>
+            <h2>Channel intensity snapshot</h2>
+          </div>
+          <p class="panel-note">A quick look at each channel's mean, RMS, and peak amplitude in the rolling window.</p>
+        </div>
+        <div class="moment-grid" id="moment-grid"></div>
+      </section>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
