@@ -1,29 +1,50 @@
 # Muse Tracker
 
-Muse Tracker is a local MuseLSL dashboard for Muse headsets with live EEG viewing, battery tracking, sensor-fit estimation, head-position tracking, and calibration guidance.
+Muse Tracker is a local live-only MuseLSL dashboard for Muse 1 and Muse 2 headsets. It focuses on real EEG streaming, telemetry, sensor-contact estimation, motion-aware calibration, and deeper signal-reliability scoring.
 
-## What it does
+If no real MuseLSL stream is available, the dashboard stays in a waiting state instead of showing synthetic demo data.
 
-- Streams and visualizes live EEG for the four Muse forehead/ear channels.
-- Tracks live battery telemetry when available.
-- Estimates electrode fit quality from the rolling EEG window.
-- Tracks head tilt and motion stability from ACC/GYRO streams when present.
-- Produces calibration confidence and a preparation guide for cleaner sessions.
-- Falls back to a polished demo feed when live LSL data is not available.
+## Features
 
-## Repo layout
+- Live EEG viewer for the four Muse channels: `TP9`, `AF7`, `AF8`, `TP10`
+- Muse family/version inference from stream identity and telemetry availability
+- Battery + telemetry surfaces when the Muse stream exposes `Telemetry`
+- Sensor-fit and skin-contact estimates derived from rolling EEG behavior
+- Head tilt and motion tracking from `ACC` and `GYRO` streams
+- Accuracy-oriented reliability stack with:
+  - artifact control
+  - channel agreement
+  - drift suppression
+  - line-noise rejection
+  - contact confidence
+  - split-window stability
+  - motion stability
+  - continuity-aware overall accuracy scoring
+- Calibration guidance that reacts to contact quality, motion, continuity, delta dominance, battery state, and line noise
+- Time graphs for battery/fit trends and band drift
+- Data-source inventory for `EEG`, `Telemetry`, `ACC`, and `GYRO`
 
-- `apps/backend/app.py` - local server, SSE stream, static serving.
-- `apps/backend/muse_lsl_bridge.py` - MuseLSL bridge, fit/motion/calibration logic.
-- `apps/frontend/index.html` - dashboard structure.
-- `apps/frontend/app.js` - live rendering and chart drawing.
-- `apps/frontend/styles.css` - dashboard visual design.
-- `apps/backend/tests/test_app.py` - backend verification.
-- `scripts/start_muse_stream.py` - optional direct Muse-to-LSL launcher with EEG, telemetry, ACC, and GYRO.
+## Repository layout
+
+- `apps/backend/app.py` - local HTTP server, SSE stream, and static asset serving
+- `apps/backend/muse_lsl_bridge.py` - MuseLSL bridge, signal processing, telemetry handling, fit estimation, motion analysis, and calibration logic
+- `apps/backend/tests/test_app.py` - backend regression tests and snapshot validation
+- `apps/frontend/index.html` - dashboard layout
+- `apps/frontend/app.js` - live rendering, chart drawing, and accuracy surfaces
+- `apps/frontend/styles.css` - frontend styling
+- `scripts/start_muse_stream.py` - direct Muse-to-LSL launcher with EEG, telemetry, accelerometer, and gyroscope streams
+- `repo_plan/` - RPG planning artifacts and per-run logs
+
+## Requirements
+
+- Python 3.10+
+- Node.js (used for frontend syntax checks)
+- A Muse headset powered on and paired through your local MuseLSL workflow
+- `muselsl` and `pylsl` in your Python environment
 
 ## Quick start
 
-### 1) Create the Python environment
+### 1) Create a Python environment
 
 ```bash
 python3 -m venv .venv
@@ -31,20 +52,24 @@ python3 -m venv .venv
 .venv/bin/pip install muselsl pylsl
 ```
 
-### 2) Start the direct Muse stream launcher
+### 2) Start the Muse stream launcher
 
-If you want battery + motion-aware calibration in the dashboard, start the richer streamer first:
+For the richest dashboard data, start the direct launcher so `EEG`, `Telemetry`, `ACC`, and `GYRO` are all exposed:
 
 ```bash
 .venv/bin/python scripts/start_muse_stream.py --name Muse-8410
 ```
 
-You can also pass `--address YOUR_DEVICE_ADDRESS`.
-
-### 3) Start the dashboard
+You can also use:
 
 ```bash
-PYTHONPATH=. .venv/bin/python apps/backend/app.py --host 127.0.0.1 --port 8000
+.venv/bin/python scripts/start_muse_stream.py --address YOUR_DEVICE_ADDRESS
+```
+
+### 3) Start the dashboard server
+
+```bash
+PYTHONPATH=. .venv/bin/python apps/backend/app.py --host 127.0.0.1 --port 8000 --profile muse-2
 ```
 
 Then open:
@@ -53,51 +78,80 @@ Then open:
 http://127.0.0.1:8000
 ```
 
-## Dashboard features
+## Live data model
 
-### Version insight
+The dashboard uses whatever real LSL streams are available from the headset:
 
-The dashboard surfaces the detected Muse family and the evidence used to infer it from the live stream identity.
+- `EEG` - required for the wave viewer and brain-state analysis
+- `Telemetry` - battery percent, fuel gauge, ADC voltage, and temperature
+- `ACC` - posture and motion stability
+- `GYRO` - stillness and angular-velocity checks
 
-### Sensor fit
+If a stream is missing, that panel stays in a waiting state instead of inventing values.
 
-The fit score is estimated from EEG spread, peak-to-peak range, and flatline behavior in the rolling signal window.
+## Accuracy model
 
-### Head position tracking
+The backend tries to make the rolling band view more trustworthy by combining multiple heuristics rather than trusting raw band power directly.
 
-When `ACC` and `GYRO` streams are available, the app estimates pitch, roll, and motion stability. This is best treated as orientation guidance rather than precise 3D tracking.
+### Signal preprocessing
 
-### Calibration coach
+- outlier clipping before spectral analysis
+- slow-drift suppression to reduce false delta inflation
+- mains component removal for common 50/60 Hz contamination
+- Hann windowing before per-band DFT accumulation
+
+### Reliability scoring
+
+Per-channel and aggregate trust are influenced by:
+
+- drift leakage
+- spike activity
+- flatline behavior
+- line-noise ratio
+- split-half spectral stability
+- estimated contact quality
+- motion contamination from accelerometer/gyroscope stability
+- stream continuity / timing jitter
+
+### Why this helps
+
+This does not make the app clinically validated, but it does make it much harder for obvious bad windows to look deceptively trustworthy.
+
+## Calibration guidance
 
 Calibration confidence blends:
 
 - sensor fit quality
 - motion stability
-- signal continuity
+- continuity score
+- delta-dominance warnings
+- telemetry availability
 - battery state
-- live telemetry availability
+- line-noise rejection
+- within-window stability
 
-## Accuracy tips
-
-- Move hair away from TP9/TP10 and keep forehead contact clean.
-- Let the headset settle for about a minute before trusting the baseline.
-- Stay still for 20-30 seconds during calibration.
-- Calibrate away from strong Bluetooth clutter and charging cables when possible.
-- Recharge the headset when battery gets low to avoid unstable sessions.
+The goal is to flag windows that are internally inconsistent before you trust the overall brain-state surface.
 
 ## Verification
 
 ```bash
-python3 -m py_compile apps/backend/app.py apps/backend/muse_lsl_bridge.py apps/backend/tests/test_app.py scripts/start_muse_stream.py scripts/tools/rpg_builder.py scripts/validate_rpg.py
+python3 -m py_compile apps/backend/app.py apps/backend/muse_lsl_bridge.py apps/backend/tests/test_app.py
 node --check apps/frontend/app.js
-python3 -m pytest
+python3 -m pytest -q
 python3 scripts/tools/rpg_builder.py --write --rpg-mode minimal --dep-depth 1 --include-tests
 python3 scripts/validate_rpg.py
 ```
 
-## Notes
+## Development notes
 
-- The fit metric is an estimate; MuseLSL does not provide a first-class "fit" stream in this setup.
-- The app is designed to stay usable in demo mode when no live headset is available.
-- For best results, use `scripts/start_muse_stream.py` instead of a plain EEG-only MuseLSL stream so telemetry and motion streams are present.
+- The dashboard is intentionally local-first and simple to run.
+- The sensor-fit metric is estimated from EEG behavior; MuseLSL does not provide a dedicated official fit stream in this setup.
+- Motion/orientation outputs are guidance signals, not precise 3D head-tracking.
+- The accuracy stack is heuristic and intended for practical session quality control, not medical interpretation.
 
+## Troubleshooting
+
+- If the dashboard stays in a waiting state, confirm your MuseLSL workflow is actually publishing an `EEG` stream.
+- If telemetry stays blank, your source likely is not publishing `Telemetry`.
+- If the accuracy score is poor, first check contact, then stillness, then nearby power noise and Bluetooth congestion.
+- If delta remains unusually strong, let the headset settle, reseat the sensors, and avoid motion before trusting the combined band view.

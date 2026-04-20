@@ -1,0 +1,56 @@
+{
+  "task_id": "muse-tracker-more-sensors-and-data-sources-finalize",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.backend.telemetry_surface",
+      "interface.backend.motion_and_calibration",
+      "interface.frontend.source_inventory",
+      "interface.frontend.motion_guidance",
+      "interface.tests.backend_api"
+    ],
+    "files": [
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/backend/tests/test_app.py",
+      "apps/frontend/app.js",
+      "apps/frontend/index.html",
+      "apps/frontend/styles.css",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "python3 -m pytest -q",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.telemetry_surface",
+        "interface.backend.motion_and_calibration",
+        "interface.frontend.source_inventory",
+        "interface.tests.backend_api"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "interface.backend.telemetry_surface",
+    "interface.frontend.source_inventory"
+  ],
+  "tested_interfaces": [
+    "interface.backend.telemetry_surface",
+    "interface.backend.motion_and_calibration",
+    "interface.frontend.source_inventory",
+    "interface.tests.backend_api"
+  ],
+  "files_changed": [
+    "apps/backend/muse_lsl_bridge.py",
+    "apps/backend/tests/test_app.py",
+    "apps/frontend/app.js",
+    "apps/frontend/index.html",
+    "apps/frontend/styles.css",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null
+}

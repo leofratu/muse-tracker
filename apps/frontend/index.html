@@ -19,6 +19,7 @@
           </p>
           <div class="hero-chips">
             <span class="chip" id="status-chip">Booting</span>
+            <span class="chip chip-outline" id="trust-chip">Trust: warming up</span>
             <span class="chip chip-outline" id="source-chip">Source: starting</span>
             <span class="chip chip-outline" id="model-chip">Profile: Muse 2</span>
             <span class="chip chip-outline" id="version-chip">Version: detecting</span>
@@ -27,7 +28,21 @@
         <div class="hero-callout">
           <p class="callout-label">Live sample rate</p>
           <div class="callout-value"><span id="sample-rate">0</span> Hz</div>
-          <p class="callout-note">Auto-falls back to a demo feed until MuseLSL comes online.</p>
+          <div class="callout-metrics">
+            <article class="callout-metric">
+              <span>Artifacts</span>
+              <strong id="artifact-score">0%</strong>
+            </article>
+            <article class="callout-metric">
+              <span>Agreement</span>
+              <strong id="agreement-score">0%</strong>
+            </article>
+            <article class="callout-metric">
+              <span>Usable sensors</span>
+              <strong id="usable-channels">0/4</strong>
+            </article>
+          </div>
+          <p class="callout-note">The dashboard stays empty until a live MuseLSL stream comes online.</p>
         </div>
       </section>
 
@@ -73,6 +88,30 @@
         </article>
       </section>
 
+      <section class="dashboard-grid">
+        <article class="panel sources-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Data sources</p>
+              <h2>Everything coming off the headset</h2>
+            </div>
+          </div>
+          <p class="panel-note" id="sources-note">Waiting for stream diagnostics.</p>
+          <div class="support-grid" id="stream-grid"></div>
+        </article>
+
+        <article class="panel telemetry-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Telemetry</p>
+              <h2>Battery, voltage, and temperature</h2>
+            </div>
+          </div>
+          <p class="panel-note" id="telemetry-note">Waiting for telemetry details.</p>
+          <div class="quality-metric-grid" id="telemetry-grid"></div>
+        </article>
+      </section>
+
       <section class="dashboard-grid fit-grid">
         <article class="panel fit-panel">
           <div class="panel-heading">
@@ -105,16 +144,40 @@
       </section>
 
       <section class="dashboard-grid fit-grid">
-        <article class="panel motion-panel">
+        <article class="panel quality-panel">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Head position</p>
-              <h2>Motion and tilt tracking</h2>
+              <p class="eyebrow">Signal confidence</p>
+              <h2>Frontend trust surface</h2>
             </div>
-            <div class="fit-score" id="motion-score">0</div>
           </div>
-          <p class="panel-note" id="motion-note">Waiting for accelerometer and gyroscope data.</p>
-          <div class="fit-channel-grid" id="motion-grid"></div>
+          <p class="panel-note" id="quality-note">Waiting for enough signal to score artifacts and agreement.</p>
+          <div class="quality-metric-grid" id="quality-grid"></div>
+        </article>
+
+        <article class="panel official-fit-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Live sensor view</p>
+              <h2>Official-style contact layout</h2>
+            </div>
+          </div>
+          <p class="panel-note" id="official-fit-note">Waiting for live contact estimates.</p>
+          <div class="official-fit-shell" id="official-fit-shell"></div>
+        </article>
+      </section>
+
+      <section class="dashboard-grid fit-grid">
+        <article class="panel aggregate-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Overall brain state</p>
+              <h2>Combined brain-wave view</h2>
+            </div>
+            <div class="fit-score" id="plausibility-score">0</div>
+          </div>
+          <p class="panel-note" id="overall-brain-note">Waiting for a combined band view.</p>
+          <div class="bands-grid" id="overall-band-grid"></div>
         </article>
 
         <article class="panel calibration-panel">
@@ -130,13 +193,27 @@
         </article>
       </section>
 
+      <section class="dashboard-grid fit-grid">
+        <article class="panel motion-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Head position</p>
+              <h2>Motion and tilt tracking</h2>
+            </div>
+            <div class="fit-score" id="motion-score">0</div>
+          </div>
+          <p class="panel-note" id="motion-note">Waiting for accelerometer and gyroscope data.</p>
+          <div class="fit-channel-grid" id="motion-grid"></div>
+        </article>
+      </section>
+
       <section class="panel waveform-panel">
         <div class="panel-heading">
           <div>
             <p class="eyebrow">Wave viewer</p>
             <h2>Live EEG traces</h2>
           </div>
-          <p class="panel-note">The plot uses the latest rolling EEG window from MuseLSL or the demo bridge.</p>
+          <p class="panel-note">The plot uses the latest rolling EEG window from MuseLSL when a live stream is available.</p>
         </div>
         <canvas id="waveform-canvas"></canvas>
       </section>

@@ -6,7 +6,7 @@
       "id": "interface.backend.lsl_bridge",
       "type": "interface",
       "path": "apps/backend/muse_lsl_bridge.py",
-      "summary": "Collect MuseLSL EEG and telemetry data, or provide a demo stream when LSL is unavailable.",
+      "summary": "Collect MuseLSL EEG and telemetry data and keep the dashboard in a waiting state until real streams arrive.",
       "status": "tested"
     },
     {
@@ -38,10 +38,45 @@
       "status": "tested"
     },
     {
+      "id": "interface.backend.sensor_fit_history",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Persist per-sensor skin-contact history so the frontend can chart each Muse electrode over time.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.telemetry_surface",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Expose separate Muse telemetry and source-inventory data including battery, fuel gauge, ADC voltage, temperature, and live stream diagnostics.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.signal_preprocessing_accuracy",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Preprocess rolling EEG windows to suppress drift artifacts, weight channels by quality, and improve overall band plausibility.",
+      "status": "tested"
+    },
+    {
       "id": "interface.backend.motion_and_calibration",
       "type": "interface",
       "path": "apps/backend/muse_lsl_bridge.py",
       "summary": "Fuse MuseLSL ACC/GYRO streams into head-position tracking and dynamic calibration guidance.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.aggregate_brain_state",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Aggregate all sensor channels into overall band summaries, delta-dominance warnings, and official-app-style contact guidance.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.reliability_stack",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Fuse preprocessing, split-half stability, line-noise rejection, contact confidence, and motion contamination into a deeper EEG reliability score.",
       "status": "tested"
     },
     {
@@ -52,10 +87,45 @@
       "status": "tested"
     },
     {
+      "id": "interface.frontend.sensor_fit_graphs",
+      "type": "interface",
+      "path": "apps/frontend/app.js",
+      "summary": "Render a live skin-contact estimate graph for each Muse sensor inside the fit panel.",
+      "status": "tested"
+    },
+    {
       "id": "interface.frontend.motion_guidance",
       "type": "interface",
       "path": "apps/frontend/app.js",
       "summary": "Render head-position tracking, calibration confidence, and preparation guidance for more accurate EEG sessions.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.aggregate_fit_view",
+      "type": "interface",
+      "path": "apps/frontend/app.js",
+      "summary": "Render overall brain-wave state, delta-dominance checks, and a live per-sensor fit panel inspired by the official calibration view.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.signal_quality_surface",
+      "type": "interface",
+      "path": "apps/frontend/app.js",
+      "summary": "Surface trust, artifact, agreement, and usable-sensor quality metrics across the hero and accuracy panels.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.reliability_surface",
+      "type": "interface",
+      "path": "apps/frontend/app.js",
+      "summary": "Render the expanded accuracy stack so line noise, contact confidence, split stability, and motion contamination are visible live.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.source_inventory",
+      "type": "interface",
+      "path": "apps/frontend/app.js",
+      "summary": "Render expanded Muse source cards plus telemetry, accelerometer, and gyroscope data surfaces from the available LSL streams.",
       "status": "tested"
     },
     {
@@ -113,8 +183,28 @@
       "type": "data_flow"
     },
     {
+      "from": "interface.backend.sensor_fit_history",
+      "to": "interface.frontend.sensor_fit_graphs",
+      "type": "data_flow"
+    },
+    {
+      "from": "interface.backend.telemetry_surface",
+      "to": "interface.frontend.source_inventory",
+      "type": "data_flow"
+    },
+    {
+      "from": "interface.backend.signal_preprocessing_accuracy",
+      "to": "interface.backend.aggregate_brain_state",
+      "type": "dependency"
+    },
+    {
       "from": "interface.backend.motion_and_calibration",
       "to": "interface.frontend.dashboard_shell",
+      "type": "data_flow"
+    },
+    {
+      "from": "interface.backend.aggregate_brain_state",
+      "to": "interface.frontend.aggregate_fit_view",
       "type": "data_flow"
     },
     {
@@ -126,6 +216,41 @@
       "from": "interface.frontend.dashboard_shell",
       "to": "interface.frontend.fit_and_trends",
       "type": "dependency"
+    },
+    {
+      "from": "interface.frontend.dashboard_shell",
+      "to": "interface.frontend.sensor_fit_graphs",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.frontend.dashboard_shell",
+      "to": "interface.frontend.aggregate_fit_view",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.frontend.dashboard_shell",
+      "to": "interface.frontend.signal_quality_surface",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.frontend.dashboard_shell",
+      "to": "interface.frontend.source_inventory",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.aggregate_brain_state",
+      "to": "interface.frontend.signal_quality_surface",
+      "type": "data_flow"
+    },
+    {
+      "from": "interface.backend.reliability_stack",
+      "to": "interface.backend.aggregate_brain_state",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.reliability_stack",
+      "to": "interface.frontend.reliability_surface",
+      "type": "data_flow"
     },
     {
       "from": "interface.backend.http_server",
@@ -147,7 +272,27 @@
       "status": "tested"
     },
     {
+      "id": "interface.backend.sensor_fit_history",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.telemetry_surface",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.signal_preprocessing_accuracy",
+      "status": "tested"
+    },
+    {
       "id": "interface.backend.motion_and_calibration",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.aggregate_brain_state",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.reliability_stack",
       "status": "tested"
     },
     {
@@ -163,7 +308,27 @@
       "status": "tested"
     },
     {
+      "id": "interface.frontend.sensor_fit_graphs",
+      "status": "tested"
+    },
+    {
       "id": "interface.frontend.motion_guidance",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.aggregate_fit_view",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.signal_quality_surface",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.reliability_surface",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.source_inventory",
       "status": "tested"
     },
     {
@@ -176,11 +341,19 @@
       "interface.backend.lsl_bridge",
       "interface.backend.http_server",
       "interface.backend.signal_intelligence",
+      "interface.backend.sensor_fit_history",
+      "interface.backend.telemetry_surface",
+      "interface.backend.signal_preprocessing_accuracy",
       "interface.backend.motion_and_calibration",
+      "interface.backend.aggregate_brain_state",
       "interface.frontend.dashboard_shell",
       "interface.frontend.live_visuals",
       "interface.frontend.fit_and_trends",
+      "interface.frontend.sensor_fit_graphs",
       "interface.frontend.motion_guidance",
+      "interface.frontend.aggregate_fit_view",
+      "interface.frontend.signal_quality_surface",
+      "interface.frontend.source_inventory",
       "interface.tests.backend_api"
     ],
     "files": [

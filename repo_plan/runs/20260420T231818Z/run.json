@@ -1,0 +1,75 @@
+{
+  "task_id": "remove-demo-data-from-muse-dashboard",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.backend.lsl_bridge",
+      "interface.backend.telemetry_surface",
+      "interface.frontend.live_visuals",
+      "interface.frontend.source_inventory",
+      "interface.tests.backend_api"
+    ],
+    "files": [
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/backend/tests/test_app.py",
+      "apps/frontend/app.js",
+      "apps/frontend/index.html",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "python3 -m pytest -q",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.lsl_bridge",
+        "interface.backend.telemetry_surface",
+        "interface.tests.backend_api"
+      ]
+    },
+    {
+      "cmd": "node --check apps/frontend/app.js",
+      "ok": true,
+      "interfaces": [
+        "interface.frontend.live_visuals",
+        "interface.frontend.source_inventory"
+      ]
+    },
+    {
+      "cmd": "python3 scripts/tools/rpg_builder.py --write --rpg-mode minimal --dep-depth 1 --include-tests && python3 scripts/validate_rpg.py",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.lsl_bridge",
+        "interface.backend.telemetry_surface",
+        "interface.frontend.live_visuals",
+        "interface.frontend.source_inventory",
+        "interface.tests.backend_api"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "interface.backend.lsl_bridge",
+    "interface.backend.telemetry_surface",
+    "interface.frontend.live_visuals",
+    "interface.frontend.source_inventory"
+  ],
+  "tested_interfaces": [
+    "interface.backend.lsl_bridge",
+    "interface.backend.telemetry_surface",
+    "interface.frontend.live_visuals",
+    "interface.frontend.source_inventory",
+    "interface.tests.backend_api"
+  ],
+  "files_changed": [
+    "apps/backend/muse_lsl_bridge.py",
+    "apps/backend/tests/test_app.py",
+    "apps/frontend/app.js",
+    "apps/frontend/index.html",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null
+}

@@ -1,0 +1,85 @@
+{
+  "task_id": "muse-tracker-frontend-quality-surface-pass",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.frontend.dashboard_shell",
+      "interface.frontend.fit_and_trends",
+      "interface.frontend.motion_guidance",
+      "interface.frontend.aggregate_fit_view",
+      "interface.frontend.signal_quality_surface"
+    ],
+    "files": [
+      "apps/frontend/index.html",
+      "apps/frontend/app.js",
+      "apps/frontend/styles.css",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "node --check apps/frontend/app.js",
+      "ok": true,
+      "interfaces": [
+        "interface.frontend.fit_and_trends",
+        "interface.frontend.motion_guidance",
+        "interface.frontend.aggregate_fit_view",
+        "interface.frontend.signal_quality_surface"
+      ]
+    },
+    {
+      "cmd": "python3 -m py_compile apps/backend/app.py apps/backend/muse_lsl_bridge.py apps/backend/tests/test_app.py scripts/start_muse_stream.py scripts/tools/rpg_builder.py scripts/validate_rpg.py",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.http_server",
+        "interface.backend.aggregate_brain_state",
+        "interface.tests.backend_api"
+      ]
+    },
+    {
+      "cmd": "python3 -m pytest",
+      "ok": true,
+      "interfaces": [
+        "interface.tests.backend_api",
+        "interface.backend.signal_intelligence",
+        "interface.backend.aggregate_brain_state"
+      ]
+    },
+    {
+      "cmd": "python3 scripts/tools/rpg_builder.py --write --rpg-mode minimal --dep-depth 1 --include-tests && python3 scripts/validate_rpg.py",
+      "ok": true,
+      "interfaces": [
+        "interface.frontend.dashboard_shell",
+        "interface.frontend.fit_and_trends",
+        "interface.frontend.motion_guidance",
+        "interface.frontend.aggregate_fit_view",
+        "interface.frontend.signal_quality_surface"
+      ]
+    }
+  ],
+  "files_changed": [
+    "apps/frontend/index.html",
+    "apps/frontend/app.js",
+    "apps/frontend/styles.css",
+    "repo_plan/file_index.json",
+    "repo_plan/rpg.json"
+  ],
+  "implemented_interfaces": [
+    "interface.frontend.dashboard_shell",
+    "interface.frontend.fit_and_trends",
+    "interface.frontend.motion_guidance",
+    "interface.frontend.aggregate_fit_view",
+    "interface.frontend.signal_quality_surface"
+  ],
+  "tested_interfaces": [
+    "interface.frontend.dashboard_shell",
+    "interface.frontend.fit_and_trends",
+    "interface.frontend.motion_guidance",
+    "interface.frontend.aggregate_fit_view",
+    "interface.frontend.signal_quality_surface"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null
+}

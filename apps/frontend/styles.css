@@ -164,6 +164,34 @@ p {
   line-height: 1.5;
 }
 
+.callout-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0.2rem 0 0.9rem;
+}
+
+.callout-metric {
+  padding: 0.8rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(16, 33, 42, 0.08);
+}
+
+.callout-metric span {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.callout-metric strong {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 1.2rem;
+}
+
 .dashboard-grid {
   margin-top: 1.2rem;
   display: grid;
@@ -173,10 +201,15 @@ p {
 
 .battery-panel,
 .support-panel,
+.sources-panel,
+.telemetry-panel,
 .fit-panel,
 .version-panel,
 .motion-panel,
 .calibration-panel,
+.aggregate-panel,
+.quality-panel,
+.official-fit-panel,
 .waveform-panel,
 .bands-panel,
 .trend-panel,
@@ -264,11 +297,128 @@ p {
 }
 
 .fit-card,
+.quality-card,
 .moment-card {
   padding: 1rem;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.76);
   border: 1px solid rgba(16, 33, 42, 0.08);
+}
+
+.quality-metric-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.quality-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.quality-card-top strong {
+  font-size: 1.2rem;
+}
+
+.quality-meter-shell {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(16, 33, 42, 0.08);
+  margin: 0.8rem 0 0.7rem;
+}
+
+.quality-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--coral), var(--gold), var(--teal));
+}
+
+.tone-excellent {
+  border-color: rgba(22, 158, 146, 0.2);
+  box-shadow: 0 12px 24px rgba(22, 158, 146, 0.08);
+}
+
+.tone-good {
+  border-color: rgba(243, 181, 71, 0.28);
+}
+
+.tone-fair {
+  border-color: rgba(240, 110, 89, 0.22);
+}
+
+.tone-poor {
+  border-color: rgba(197, 77, 116, 0.22);
+}
+
+.official-fit-shell {
+  margin-top: 1rem;
+  min-height: 260px;
+  padding: 1rem;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(246,241,232,0.82));
+  border: 1px solid rgba(16, 33, 42, 0.08);
+  display: grid;
+  place-items: center;
+}
+
+.official-fit-map {
+  position: relative;
+  width: min(320px, 100%);
+  height: 190px;
+}
+
+.official-fit-arch {
+  position: absolute;
+  inset: 20px 18px 24px;
+  border: 10px solid rgba(16, 33, 42, 0.12);
+  border-bottom: none;
+  border-radius: 220px 220px 0 0;
+}
+
+.sensor-dot {
+  position: absolute;
+  width: 74px;
+  height: 74px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #10212a;
+  text-align: center;
+  padding: 0.45rem;
+  border: 2px solid rgba(16, 33, 42, 0.12);
+  box-shadow: 0 10px 24px rgba(16, 33, 42, 0.12);
+}
+
+.sensor-dot strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.sensor-dot span {
+  font-size: 0.72rem;
+  margin-top: 0.2rem;
+}
+
+.sensor-excellent {
+  background: linear-gradient(180deg, rgba(22, 158, 146, 0.9), rgba(125, 211, 199, 0.92));
+}
+
+.sensor-good {
+  background: linear-gradient(180deg, rgba(243, 181, 71, 0.88), rgba(255, 220, 148, 0.92));
+}
+
+.sensor-fair {
+  background: linear-gradient(180deg, rgba(240, 110, 89, 0.88), rgba(248, 170, 152, 0.92));
+}
+
+.sensor-poor,
+.sensor-waiting {
+  background: linear-gradient(180deg, rgba(197, 77, 116, 0.84), rgba(232, 167, 187, 0.9));
 }
 
 .support-card h3 {
@@ -318,6 +468,44 @@ p {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--coral), var(--gold), var(--teal));
+}
+
+.fit-sparkline-shell {
+  margin: 0.55rem 0 0.7rem;
+}
+
+.fit-sparkline {
+  display: block;
+  width: 100%;
+  height: 56px;
+}
+
+.fit-sparkline rect {
+  fill: rgba(16, 33, 42, 0.04);
+}
+
+.fit-sparkline-guide {
+  stroke: rgba(16, 33, 42, 0.12);
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.fit-sparkline-line {
+  fill: none;
+  stroke: var(--sea);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fit-sparkline-empty {
+  min-height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(16, 33, 42, 0.04);
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .fit-copy,
@@ -450,6 +638,8 @@ p {
     grid-template-columns: 1fr;
   }
 
+  .callout-metrics,
+  .quality-metric-grid,
   .fit-channel-grid,
   .moment-grid {
     grid-template-columns: 1fr;
@@ -466,8 +656,13 @@ p {
   .hero,
   .battery-panel,
   .support-panel,
+  .sources-panel,
+  .telemetry-panel,
   .fit-panel,
   .version-panel,
+  .quality-panel,
+  .aggregate-panel,
+  .official-fit-panel,
   .motion-panel,
   .calibration-panel,
   .waveform-panel,
@@ -480,6 +675,11 @@ p {
 
   .battery-meta {
     grid-template-columns: 1fr;
+  }
+
+  .quality-card-top {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   #waveform-canvas {

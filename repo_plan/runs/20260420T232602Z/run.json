@@ -1,0 +1,84 @@
+{
+  "task_id": "deepen-muse-accuracy-stack",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.backend.signal_preprocessing_accuracy",
+      "interface.backend.reliability_stack",
+      "interface.backend.aggregate_brain_state",
+      "interface.frontend.signal_quality_surface",
+      "interface.frontend.reliability_surface",
+      "interface.tests.backend_api"
+    ],
+    "files": [
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/backend/tests/test_app.py",
+      "apps/frontend/app.js",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "python3 -m py_compile apps/backend/app.py apps/backend/muse_lsl_bridge.py apps/backend/tests/test_app.py",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.signal_preprocessing_accuracy",
+        "interface.backend.reliability_stack",
+        "interface.tests.backend_api"
+      ]
+    },
+    {
+      "cmd": "node --check apps/frontend/app.js",
+      "ok": true,
+      "interfaces": [
+        "interface.frontend.signal_quality_surface",
+        "interface.frontend.reliability_surface"
+      ]
+    },
+    {
+      "cmd": "python3 -m pytest -q",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.signal_preprocessing_accuracy",
+        "interface.backend.reliability_stack",
+        "interface.backend.aggregate_brain_state",
+        "interface.tests.backend_api"
+      ]
+    },
+    {
+      "cmd": "python3 scripts/tools/rpg_builder.py --write --rpg-mode minimal --dep-depth 1 --include-tests && python3 scripts/validate_rpg.py",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.signal_preprocessing_accuracy",
+        "interface.backend.reliability_stack",
+        "interface.backend.aggregate_brain_state",
+        "interface.frontend.signal_quality_surface",
+        "interface.frontend.reliability_surface",
+        "interface.tests.backend_api"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "interface.backend.reliability_stack",
+    "interface.frontend.reliability_surface"
+  ],
+  "tested_interfaces": [
+    "interface.backend.signal_preprocessing_accuracy",
+    "interface.backend.reliability_stack",
+    "interface.backend.aggregate_brain_state",
+    "interface.frontend.signal_quality_surface",
+    "interface.frontend.reliability_surface",
+    "interface.tests.backend_api"
+  ],
+  "files_changed": [
+    "apps/backend/muse_lsl_bridge.py",
+    "apps/backend/tests/test_app.py",
+    "apps/frontend/app.js",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null
+}
