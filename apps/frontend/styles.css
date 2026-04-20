@@ -1,0 +1,497 @@
+:root {
+  --bg: #f6f1e8;
+  --ink: #10212a;
+  --muted: #53616c;
+  --panel: rgba(255, 252, 246, 0.86);
+  --panel-border: rgba(16, 33, 42, 0.12);
+  --sea: #0f766e;
+  --teal: #169e92;
+  --coral: #f06e59;
+  --gold: #f3b547;
+  --rose: #c54d74;
+  --shadow: 0 18px 48px rgba(24, 34, 42, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(243, 181, 71, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(22, 158, 146, 0.18), transparent 30%),
+    linear-gradient(180deg, #fbf7f2 0%, var(--bg) 100%);
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+.ambient {
+  position: fixed;
+  inset: auto;
+  width: 22rem;
+  height: 22rem;
+  filter: blur(8px);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.ambient-left {
+  top: -6rem;
+  left: -5rem;
+  background: radial-gradient(circle, rgba(240, 110, 89, 0.24), transparent 68%);
+}
+
+.ambient-right {
+  right: -6rem;
+  bottom: 8rem;
+  background: radial-gradient(circle, rgba(22, 158, 146, 0.22), transparent 68%);
+}
+
+.shell {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, calc(100vw - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 28px;
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.7fr 0.8fr;
+  gap: 1.25rem;
+  padding: 1.75rem;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.74rem;
+  color: var(--sea);
+  margin-bottom: 0.7rem;
+}
+
+.hero h1,
+.panel h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: -0.03em;
+}
+
+.hero h1 {
+  font-size: clamp(2.3rem, 5vw, 4.4rem);
+  line-height: 0.96;
+  max-width: 12ch;
+}
+
+.hero-copy,
+.panel-note,
+.meta-label {
+  color: var(--muted);
+}
+
+.hero-copy {
+  margin-top: 1rem;
+  max-width: 52ch;
+  line-height: 1.55;
+}
+
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.3rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  font-size: 0.92rem;
+  background: linear-gradient(135deg, rgba(16, 118, 110, 0.92), rgba(22, 158, 146, 0.92));
+  color: #f8fcfb;
+}
+
+.chip-outline {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  border: 1px solid rgba(16, 33, 42, 0.12);
+}
+
+.hero-callout {
+  padding: 1.2rem;
+  border-radius: 22px;
+  background:
+    linear-gradient(150deg, rgba(16, 118, 110, 0.1), rgba(240, 110, 89, 0.12)),
+    rgba(255, 255, 255, 0.72);
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.callout-label,
+.meta-label {
+  font-size: 0.84rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.callout-value {
+  font-size: clamp(2.3rem, 5vw, 3.6rem);
+  font-weight: 700;
+  margin: 0.6rem 0;
+}
+
+.callout-note {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.dashboard-grid {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 1.2rem;
+}
+
+.battery-panel,
+.support-panel,
+.fit-panel,
+.version-panel,
+.motion-panel,
+.calibration-panel,
+.waveform-panel,
+.bands-panel,
+.trend-panel,
+.moments-panel {
+  padding: 1.4rem;
+}
+
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.panel-heading h2 {
+  font-size: clamp(1.55rem, 2vw, 2.1rem);
+}
+
+.battery-value {
+  font-size: clamp(2rem, 3vw, 3rem);
+  font-weight: 700;
+  color: var(--sea);
+}
+
+.fit-score {
+  font-size: clamp(2rem, 3vw, 3rem);
+  font-weight: 700;
+  color: var(--coral);
+}
+
+.battery-bar-shell {
+  width: 100%;
+  height: 20px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(16, 33, 42, 0.08);
+  margin: 1rem 0 1.1rem;
+}
+
+.battery-bar-fill {
+  width: 8%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--coral), var(--gold), var(--teal));
+  transition: width 280ms ease;
+}
+
+.battery-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.meta-value {
+  margin-top: 0.35rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.support-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.fit-grid,
+.trends-grid {
+  margin-top: 1.2rem;
+}
+
+.fit-channel-grid,
+.moment-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.support-card {
+  padding: 1rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(16, 33, 42, 0.08);
+}
+
+.fit-card,
+.moment-card {
+  padding: 1rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(16, 33, 42, 0.08);
+}
+
+.support-card h3 {
+  margin: 0.2rem 0 0.4rem;
+  font-size: 1.1rem;
+}
+
+.fit-card h3,
+.moment-card h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1.05rem;
+}
+
+.support-card p {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.support-pill {
+  display: inline-flex;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(16, 118, 110, 0.12);
+  color: var(--sea);
+  font-size: 0.82rem;
+}
+
+.fit-pill {
+  display: inline-flex;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(240, 110, 89, 0.12);
+  color: var(--coral);
+  font-size: 0.82rem;
+}
+
+.fit-meter-shell {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(16, 33, 42, 0.08);
+  overflow: hidden;
+  margin: 0.65rem 0 0.75rem;
+}
+
+.fit-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--coral), var(--gold), var(--teal));
+}
+
+.fit-copy,
+.moment-copy {
+  color: var(--muted);
+  line-height: 1.45;
+  font-size: 0.95rem;
+}
+
+.version-copy {
+  margin-top: 0.8rem;
+}
+
+.version-name {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.6rem, 2vw, 2.2rem);
+}
+
+.version-meta {
+  margin-top: 0.45rem;
+  color: var(--muted);
+}
+
+.version-evidence {
+  margin: 1rem 0 0;
+  padding-left: 1rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.waveform-panel,
+.bands-panel {
+  margin-top: 1.2rem;
+}
+
+#waveform-canvas,
+#trend-canvas,
+#band-trend-canvas {
+  width: 100%;
+  margin-top: 1rem;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(16, 33, 42, 0.96), rgba(12, 24, 31, 0.92));
+}
+
+#waveform-canvas {
+  height: 360px;
+}
+
+#trend-canvas,
+#band-trend-canvas {
+  height: 260px;
+}
+
+.bands-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.band-card {
+  padding: 1rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(16, 33, 42, 0.08);
+}
+
+.band-card h3 {
+  margin-bottom: 0.6rem;
+}
+
+.band-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 48px;
+  gap: 0.65rem;
+  align-items: center;
+  margin-top: 0.6rem;
+}
+
+.band-bar {
+  position: relative;
+  height: 11px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(16, 33, 42, 0.08);
+}
+
+.band-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--rose), var(--gold), var(--teal));
+}
+
+.band-value {
+  text-align: right;
+  font-weight: 600;
+}
+
+.moments-panel {
+  margin-top: 1.2rem;
+}
+
+.moment-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.8rem;
+}
+
+.moment-stat {
+  padding: 0.7rem;
+  border-radius: 16px;
+  background: rgba(246, 241, 232, 0.78);
+}
+
+.moment-stat strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.05rem;
+}
+
+@media (max-width: 960px) {
+  .hero,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .support-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fit-channel-grid,
+  .moment-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .shell {
+    width: min(100vw - 1rem, 100%);
+    padding-top: 0.75rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .hero,
+  .battery-panel,
+  .support-panel,
+  .fit-panel,
+  .version-panel,
+  .motion-panel,
+  .calibration-panel,
+  .waveform-panel,
+  .bands-panel,
+  .trend-panel,
+  .moments-panel {
+    padding: 1rem;
+    border-radius: 22px;
+  }
+
+  .battery-meta {
+    grid-template-columns: 1fr;
+  }
+
+  #waveform-canvas {
+    height: 280px;
+  }
+
+  #trend-canvas,
+  #band-trend-canvas {
+    height: 220px;
+  }
+
+  .moment-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
