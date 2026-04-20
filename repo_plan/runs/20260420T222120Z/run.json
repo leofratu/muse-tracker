@@ -1,0 +1,121 @@
+{
+  "task_id": "muse-tracker-accuracy-and-gui-expansion",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.backend.lsl_bridge",
+      "interface.backend.http_server",
+      "interface.backend.signal_intelligence",
+      "interface.backend.motion_and_calibration",
+      "interface.frontend.dashboard_shell",
+      "interface.frontend.live_visuals",
+      "interface.frontend.fit_and_trends",
+      "interface.frontend.motion_guidance",
+      "interface.tests.backend_api"
+    ],
+    "files": [
+      "apps/backend/app.py",
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/backend/tests/test_app.py",
+      "apps/frontend/index.html",
+      "apps/frontend/app.js",
+      "apps/frontend/styles.css",
+      "scripts/start_muse_stream.py",
+      "README.md",
+      "docs/guides/WORKING_IN_THIS_REPO.md",
+      ".gitignore",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json",
+      "scripts/tools/rpg_builder.py",
+      "scripts/validate_rpg.py"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "python3 -m py_compile apps/backend/app.py apps/backend/muse_lsl_bridge.py apps/backend/tests/test_app.py scripts/start_muse_stream.py scripts/tools/rpg_builder.py scripts/validate_rpg.py",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.lsl_bridge",
+        "interface.backend.signal_intelligence",
+        "interface.backend.motion_and_calibration",
+        "interface.backend.http_server",
+        "interface.tests.backend_api"
+      ]
+    },
+    {
+      "cmd": "node --check apps/frontend/app.js",
+      "ok": true,
+      "interfaces": [
+        "interface.frontend.live_visuals",
+        "interface.frontend.fit_and_trends",
+        "interface.frontend.motion_guidance"
+      ]
+    },
+    {
+      "cmd": "python3 -m pytest",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.lsl_bridge",
+        "interface.backend.signal_intelligence",
+        "interface.backend.motion_and_calibration",
+        "interface.backend.http_server",
+        "interface.frontend.dashboard_shell",
+        "interface.tests.backend_api"
+      ]
+    },
+    {
+      "cmd": "python3 scripts/tools/rpg_builder.py --write --rpg-mode minimal --dep-depth 1 --include-tests && python3 scripts/validate_rpg.py",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.lsl_bridge",
+        "interface.backend.signal_intelligence",
+        "interface.backend.motion_and_calibration",
+        "interface.frontend.live_visuals",
+        "interface.frontend.fit_and_trends",
+        "interface.frontend.motion_guidance",
+        "interface.tests.backend_api"
+      ]
+    }
+  ],
+  "files_changed": [
+    ".gitignore",
+    "README.md",
+    "apps/backend/app.py",
+    "apps/backend/muse_lsl_bridge.py",
+    "apps/backend/tests/test_app.py",
+    "apps/frontend/app.js",
+    "apps/frontend/index.html",
+    "apps/frontend/styles.css",
+    "docs/guides/WORKING_IN_THIS_REPO.md",
+    "repo_plan/file_index.json",
+    "repo_plan/rpg.json",
+    "scripts/start_muse_stream.py",
+    "scripts/tools/rpg_builder.py",
+    "scripts/validate_rpg.py"
+  ],
+  "implemented_interfaces": [
+    "interface.backend.lsl_bridge",
+    "interface.backend.signal_intelligence",
+    "interface.backend.motion_and_calibration",
+    "interface.backend.http_server",
+    "interface.frontend.dashboard_shell",
+    "interface.frontend.live_visuals",
+    "interface.frontend.fit_and_trends",
+    "interface.frontend.motion_guidance",
+    "interface.tests.backend_api"
+  ],
+  "tested_interfaces": [
+    "interface.backend.lsl_bridge",
+    "interface.backend.signal_intelligence",
+    "interface.backend.motion_and_calibration",
+    "interface.backend.http_server",
+    "interface.frontend.dashboard_shell",
+    "interface.frontend.live_visuals",
+    "interface.frontend.fit_and_trends",
+    "interface.frontend.motion_guidance",
+    "interface.tests.backend_api"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null
+}
