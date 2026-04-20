@@ -1,0 +1,195 @@
+{
+  "version": 1,
+  "task": "Build a clean MuseLSL GUI with Muse 1 and Muse 2 support, battery tracking, and live brain-wave visualization.",
+  "nodes": [
+    {
+      "id": "interface.backend.lsl_bridge",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Collect MuseLSL EEG and telemetry data, or provide a demo stream when LSL is unavailable.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.http_server",
+      "type": "interface",
+      "path": "apps/backend/app.py",
+      "summary": "Serve the frontend and expose status, health, and SSE streaming endpoints.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.dashboard_shell",
+      "type": "interface",
+      "path": "apps/frontend/index.html",
+      "summary": "Present the Muse device overview, connection controls, battery tracker, and viewer layout.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.live_visuals",
+      "type": "interface",
+      "path": "apps/frontend/app.js",
+      "summary": "Render live battery state, EEG waveforms, and brain-wave band cards from SSE updates.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.signal_intelligence",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Infer headset version details, sensor-fit/contact quality, and trend metrics from MuseLSL samples and telemetry.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.motion_and_calibration",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Fuse MuseLSL ACC/GYRO streams into head-position tracking and dynamic calibration guidance.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.fit_and_trends",
+      "type": "interface",
+      "path": "apps/frontend/app.js",
+      "summary": "Render headset-version detail, contact-fit cards, and additional time-based trend charts.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.motion_guidance",
+      "type": "interface",
+      "path": "apps/frontend/app.js",
+      "summary": "Render head-position tracking, calibration confidence, and preparation guidance for more accurate EEG sessions.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.tests.backend_api",
+      "type": "interface",
+      "path": "apps/backend/tests/test_app.py",
+      "summary": "Verify the bridge snapshot shape and HTTP API responses.",
+      "status": "tested"
+    },
+    {
+      "id": "file.apps_backend_app",
+      "type": "file",
+      "path": "apps/backend/app.py"
+    },
+    {
+      "id": "file.apps_backend_bridge",
+      "type": "file",
+      "path": "apps/backend/muse_lsl_bridge.py"
+    },
+    {
+      "id": "file.apps_frontend_index",
+      "type": "file",
+      "path": "apps/frontend/index.html"
+    },
+    {
+      "id": "file.apps_frontend_script",
+      "type": "file",
+      "path": "apps/frontend/app.js"
+    },
+    {
+      "id": "file.apps_frontend_styles",
+      "type": "file",
+      "path": "apps/frontend/styles.css"
+    },
+    {
+      "id": "file.tests_backend_api",
+      "type": "file",
+      "path": "apps/backend/tests/test_app.py"
+    }
+  ],
+  "edges": [
+    {
+      "from": "interface.backend.lsl_bridge",
+      "to": "interface.backend.http_server",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.http_server",
+      "to": "interface.frontend.dashboard_shell",
+      "type": "data_flow"
+    },
+    {
+      "from": "interface.backend.signal_intelligence",
+      "to": "interface.frontend.dashboard_shell",
+      "type": "data_flow"
+    },
+    {
+      "from": "interface.backend.motion_and_calibration",
+      "to": "interface.frontend.dashboard_shell",
+      "type": "data_flow"
+    },
+    {
+      "from": "interface.frontend.dashboard_shell",
+      "to": "interface.frontend.live_visuals",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.frontend.dashboard_shell",
+      "to": "interface.frontend.fit_and_trends",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.http_server",
+      "to": "interface.tests.backend_api",
+      "type": "dependency"
+    }
+  ],
+  "work_plan": [
+    {
+      "id": "interface.backend.lsl_bridge",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.http_server",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.signal_intelligence",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.motion_and_calibration",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.dashboard_shell",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.live_visuals",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.fit_and_trends",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.motion_guidance",
+      "status": "tested"
+    },
+    {
+      "id": "interface.tests.backend_api",
+      "status": "tested"
+    }
+  ],
+  "localization": {
+    "nodes": [
+      "interface.backend.lsl_bridge",
+      "interface.backend.http_server",
+      "interface.backend.signal_intelligence",
+      "interface.backend.motion_and_calibration",
+      "interface.frontend.dashboard_shell",
+      "interface.frontend.live_visuals",
+      "interface.frontend.fit_and_trends",
+      "interface.frontend.motion_guidance",
+      "interface.tests.backend_api"
+    ],
+    "files": [
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/backend/app.py",
+      "apps/frontend/index.html",
+      "apps/frontend/app.js",
+      "apps/frontend/styles.css",
+      "apps/backend/tests/test_app.py"
+    ]
+  }
+}
