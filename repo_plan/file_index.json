@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-04-20T22:18:20+00:00",
+  "files": [
+    ".gitignore",
+    "README.md",
+    "apps/__init__.py",
+    "apps/backend/__init__.py",
+    "apps/backend/app.py",
+    "apps/backend/muse_lsl_bridge.py",
+    "apps/backend/tests/test_app.py",
+    "apps/frontend/app.js",
+    "apps/frontend/index.html",
+    "apps/frontend/styles.css",
+    "docs/guides/WORKING_IN_THIS_REPO.md",
+    "pytest.ini",
+    "repo_plan/file_index.json",
+    "repo_plan/rpg.json",
+    "scripts/start_muse_stream.py",
+    "scripts/tools/rpg_builder.py",
+    "scripts/validate_rpg.py"
+  ]
+}
