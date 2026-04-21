@@ -6,8 +6,17 @@ import threading
 import time
 from urllib.request import urlopen
 
+import apps.backend.muse_lsl_bridge as muse_lsl_bridge
 from apps.backend.app import build_server
-from apps.backend.muse_lsl_bridge import MuseLSLBridge, build_signal_metrics, extract_battery_percent
+from apps.backend.muse_lsl_bridge import (
+    MuseLSLBridge,
+    build_brain_state,
+    build_baseline_metrics,
+    build_fit_metrics,
+    build_motion_metrics,
+    build_signal_metrics,
+    extract_battery_percent,
+)
 
 
 def test_extract_battery_percent_accepts_common_ranges() -> None:
@@ -124,6 +133,9 @@ def test_bridge_snapshot_contains_live_samples_and_telemetry() -> None:
         "waiting",
     }
     assert 0 <= snapshot["brainState"]["plausibilityScore"] <= 100
+    assert "baseline" in snapshot
+    assert "vsNormal" in snapshot["baseline"]
+    assert "vsFocused" in snapshot["baseline"]
 
 
 def test_signal_metrics_reduce_slow_drift_bias() -> None:
@@ -178,6 +190,205 @@ def test_signal_metrics_penalize_line_noise_contamination() -> None:
     assert noisy_metrics["quality"]["lineNoiseScore"] < clean_metrics["quality"]["lineNoiseScore"]
     assert noisy_metrics["quality"]["accuracyScore"] <= clean_metrics["quality"]["accuracyScore"]
     assert "line noise" in " ".join(noisy_metrics["quality"]["blockers"]).lower()
+
+
+def test_build_baseline_metrics_compares_current_state_to_normal_and_focused_windows() -> None:
+    history = []
+    for index in range(60):
+        timestamp = 100.0 + index
+        beta = 18.0 + (index % 4)
+        alpha = 24.0 + ((index + 1) % 3)
+        delta = 18.0 - min(index * 0.1, 4.0)
+        theta = 20.0 - min(index * 0.05, 2.0)
+        gamma = max(0.0, 100.0 - (beta + alpha + delta + theta))
+        history.append(
+            {
+                "timestamp": timestamp,
+                "capturedAt": f"2026-04-21T00:00:{index:02d}+00:00",
+                "bands": {
+                    "delta": round(delta, 1),
+                    "theta": round(theta, 1),
+                    "alpha": round(alpha, 1),
+                    "beta": round(beta, 1),
+                    "gamma": round(gamma, 1),
+                },
+                "dominantBand": "alpha",
+                "accuracyScore": 68.0 + (index % 5),
+                "fitScore": 60.0 + (index % 4),
+                "motionScore": 78.0,
+                "continuityScore": 93.0,
+                "qualityAnchor": 72.0 + (index % 6),
+                "focusIndex": 55.0 + (index * 0.35),
+                "calmIndex": 58.0,
+                "acceptedForBaseline": True,
+                "eligibleNormal": True,
+            }
+        )
+
+    current = {
+        "timestamp": 161.0,
+        "capturedAt": "2026-04-21T00:02:41+00:00",
+        "bands": {
+            "delta": 11.0,
+            "theta": 18.0,
+            "alpha": 26.0,
+            "beta": 31.0,
+            "gamma": 14.0,
+        },
+        "dominantBand": "beta",
+        "accuracyScore": 81.0,
+        "fitScore": 67.0,
+        "motionScore": 84.0,
+        "continuityScore": 97.0,
+        "qualityAnchor": 83.0,
+        "focusIndex": 74.0,
+        "calmIndex": 52.0,
+        "acceptedForBaseline": True,
+        "eligibleNormal": True,
+    }
+
+    baseline = build_baseline_metrics(history=history, current_point=current)
+
+    assert baseline["available"] is True
+    assert baseline["windowCount"] >= 30
+    assert baseline["durationSeconds"] >= 29.0
+    assert baseline["normal"]["dominantBand"] in {"alpha", "beta"}
+    assert baseline["focused"]["focusIndex"] >= baseline["normal"]["focusIndex"]
+    assert baseline["vsNormal"]["status"] in {"more focused", "close", "less focused"}
+    assert baseline["vsFocused"]["summary"]
+    assert baseline["history"]
+
+
+def test_brain_state_falls_back_to_frontal_pair_when_rear_channels_are_rail_contaminated() -> None:
+    sample_rate = 256
+    samples = []
+    for index in range(sample_rate * 4):
+        t = index / sample_rate
+        frontal = (18.0 * math.sin(2.0 * math.pi * 10.0 * t)) + (7.0 * math.sin(2.0 * math.pi * 18.0 * t))
+        rear_noise = 980.0 if index % 40 == 0 else ((index % 2) * 180.0 - 90.0)
+        samples.append(
+            {
+                "timestamp": t,
+                "values": [rear_noise, frontal * 0.98, frontal * 1.02, -rear_noise],
+            }
+        )
+
+    fit_metrics = build_fit_metrics(samples, sample_rate)
+    motion_metrics = build_motion_metrics([], [])
+    metrics = build_signal_metrics(samples, sample_rate, fit_metrics=fit_metrics, motion_metrics=motion_metrics)
+    brain_state = build_brain_state(metrics, fit_metrics, motion_metrics)
+
+    assert brain_state["withheld"] is False
+    assert brain_state["sourceMode"] == "frontal-only"
+    assert brain_state["sourceSensors"] == ["AF7", "AF8"]
+    assert brain_state["overallBands"]["alpha"] > brain_state["overallBands"]["delta"]
+    rejected = {channel["channel"]: channel["rejectReasons"] for channel in metrics["bands"] if not channel["admitted"]}
+    assert "TP9" in rejected
+    assert any("clipping" in reason.lower() or "railing" in reason.lower() for reason in rejected["TP9"])
+
+
+def test_brain_state_is_withheld_when_clean_sensor_coverage_is_too_low() -> None:
+    sample_rate = 256
+    samples = []
+    for index in range(sample_rate * 4):
+        t = index / sample_rate
+        clean = 16.0 * math.sin(2.0 * math.pi * 10.0 * t)
+        clipped = 999.51 if index % 18 == 0 else -999.51 if index % 19 == 0 else 0.0
+        flat = 0.0
+        samples.append(
+            {
+                "timestamp": t,
+                "values": [clipped, clean, clipped, flat],
+            }
+        )
+
+    fit_metrics = build_fit_metrics(samples, sample_rate)
+    motion_metrics = build_motion_metrics([], [])
+    metrics = build_signal_metrics(samples, sample_rate, fit_metrics=fit_metrics, motion_metrics=motion_metrics)
+    brain_state = build_brain_state(metrics, fit_metrics, motion_metrics)
+
+    assert brain_state["withheld"] is True
+    assert brain_state["sourceMode"] == "withheld"
+    assert any("low clean-window coverage" in reason.lower() for reason in brain_state["withheldReasons"])
+
+
+def test_bridge_falls_back_to_pull_sample_when_chunks_are_empty(monkeypatch) -> None:
+    class FakeStream:
+        def __init__(self, stream_type: str, name: str, source_id: str, rate: float, channels: int) -> None:
+            self._type = stream_type
+            self._name = name
+            self._source_id = source_id
+            self._rate = rate
+            self._channels = channels
+
+        def type(self) -> str:
+            return self._type
+
+        def name(self) -> str:
+            return self._name
+
+        def source_id(self) -> str:
+            return self._source_id
+
+        def nominal_srate(self) -> float:
+            return self._rate
+
+        def channel_count(self) -> int:
+            return self._channels
+
+    class FakeInlet:
+        def __init__(self, chunk=None, timestamps=None, samples=None) -> None:
+            self._chunk = chunk or []
+            self._timestamps = timestamps or []
+            self._samples = list(samples or [])
+            self.opened = False
+
+        def open_stream(self, timeout: float | None = None) -> None:
+            self.opened = True
+
+        def pull_chunk(self, timeout: float = 0.0, max_samples: int = 1):
+            chunk, timestamps = self._chunk, self._timestamps
+            self._chunk, self._timestamps = [], []
+            return chunk, timestamps
+
+        def pull_sample(self, timeout: float = 0.0):
+            if self._samples:
+                return self._samples.pop(0)
+            return None, None
+
+    streams_by_type = {
+        "EEG": [FakeStream("EEG", "Muse", "Muse123", 256.0, 5)],
+        "ACC": [FakeStream("ACC", "Muse ACC", "Muse123", 52.0, 3)],
+        "GYRO": [FakeStream("GYRO", "Muse GYRO", "Muse123", 52.0, 3)],
+    }
+    inlets = {
+        "EEG": FakeInlet(samples=[([1.0, 2.0, 3.0, 4.0, 9.0], 100.0)]),
+        "ACC": FakeInlet(chunk=[[0.1, 0.2, 0.98]], timestamps=[100.01]),
+        "GYRO": FakeInlet(chunk=[[0.3, 0.2, 0.1]], timestamps=[100.02]),
+    }
+
+    def fake_resolve_byprop(prop: str, value: str, timeout: float = 0.0):
+        assert prop == "type"
+        return streams_by_type.get(value, [])
+
+    def fake_stream_inlet(stream, max_buflen=None):
+        return inlets[stream.type()]
+
+    monkeypatch.setattr(muse_lsl_bridge, "resolve_byprop", fake_resolve_byprop)
+    monkeypatch.setattr(muse_lsl_bridge, "StreamInlet", fake_stream_inlet)
+
+    bridge = MuseLSLBridge(profile_key="muse-2", sample_rate_hz=256)
+    assert bridge._try_pull_lsl() is True
+
+    snapshot = bridge.snapshot()
+
+    assert snapshot["connection"]["connected"] is True
+    assert snapshot["eeg"]["sampleCount"] == 1
+    assert snapshot["eeg"]["samples"][-1]["values"] == [1.0, 2.0, 3.0, 4.0]
+    assert snapshot["motion"]["available"] is True
+    assert snapshot["motion"]["sensors"]["accelerometer"]["history"]
+    assert snapshot["motion"]["sensors"]["gyroscope"]["history"]
+    assert inlets["EEG"].opened is True
 
 
 def test_http_server_exposes_health_and_status() -> None:
