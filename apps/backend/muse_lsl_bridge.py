@@ -17,6 +17,11 @@ except Exception:  # pragma: no cover - optional dependency
 
 
 CHANNELS = ("TP9", "AF7", "AF8", "TP10")
+FRONT_CHANNELS = ("AF7", "AF8")
+REAR_CHANNELS = ("TP9", "TP10")
+MIN_COMBINED_CLEAN_CHANNELS = 3
+MIN_BASELINE_WINDOWS = 18
+MIN_BASELINE_DURATION_SECONDS = 45.0
 
 DEVICE_PROFILES = {
     "muse-1": {
@@ -101,6 +106,8 @@ class MuseSampleStore:
         }
         self._motion_history: Deque[dict[str, Any]] = deque(maxlen=180)
         self._confidence_history: Deque[dict[str, Any]] = deque(maxlen=180)
+        self._baseline_history: Deque[dict[str, Any]] = deque(maxlen=240)
+        self._last_baseline_timestamp = 0.0
         self._telemetry = {
             "batteryPercent": None,
             "fuelGaugePercent": None,
@@ -234,12 +241,30 @@ class MuseSampleStore:
                 fit_metrics=fit_metrics,
                 motion_metrics=motion_metrics,
             )
+            brain_state = build_brain_state(metrics, fit_metrics, motion_metrics)
+            baseline_point = build_baseline_point(
+                signal_metrics=metrics,
+                fit_metrics=fit_metrics,
+                motion_metrics=motion_metrics,
+                latest_timestamp=latest_timestamp,
+            )
+            if baseline_point and (
+                self._last_baseline_timestamp <= 0.0
+                or latest_timestamp - self._last_baseline_timestamp >= 1.0
+            ):
+                self._baseline_history.append(baseline_point)
+                self._last_baseline_timestamp = latest_timestamp
+            baseline_metrics = build_baseline_metrics(
+                history=list(self._baseline_history),
+                current_point=baseline_point,
+            )
             calibration = build_calibration_guidance(
                 fit_metrics=fit_metrics,
                 motion_metrics=motion_metrics,
                 signal_metrics=metrics,
                 battery=self._battery,
                 telemetry_available=self._telemetry_available,
+                baseline_metrics=baseline_metrics,
             )
             if samples:
                 self._fit_history.append(
@@ -317,12 +342,13 @@ class MuseSampleStore:
                 "sensorFit": {
                     **attach_fit_channel_history(fit_metrics, self._fit_channel_history),
                     "history": list(self._fit_history),
-                    "method": "Estimated from rolling EEG stability because this MuseLSL stream does not expose a dedicated fit metric.",
+                    "method": "EEG-derived estimated contact because this MuseLSL stream does not expose a dedicated impedance/contact metric.",
                 },
                 "motion": {
                     **motion_metrics,
                     "history": list(self._motion_history),
                 },
+                "baseline": baseline_metrics,
                 "calibration": {
                     **calibration,
                     "history": list(self._confidence_history),
@@ -334,7 +360,7 @@ class MuseSampleStore:
                     "samples": recent_samples,
                     "metrics": metrics,
                 },
-                "brainState": build_brain_state(metrics, fit_metrics, motion_metrics),
+                "brainState": brain_state,
             }
 
 
@@ -363,6 +389,10 @@ class MuseLSLBridge:
         self._last_resolve_attempt = 0.0
         self._stream_name = "Waiting for MuseLSL"
         self._stream_source_id = ""
+        self._last_eeg_sample_at = 0.0
+        self._last_telemetry_sample_at = 0.0
+        self._last_acc_sample_at = 0.0
+        self._last_gyro_sample_at = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -384,6 +414,61 @@ class MuseLSLBridge:
             self._try_pull_lsl()
             time.sleep(0.03)
 
+    def _build_inlet(self, stream: Any, max_buflen: int) -> Any:
+        inlet = StreamInlet(stream, max_buflen=max_buflen)
+        open_stream = getattr(inlet, "open_stream", None)
+        if callable(open_stream):
+            try:
+                open_stream(timeout=0.25)
+            except Exception:
+                # Some pylsl builds do not require or like an explicit open.
+                pass
+        return inlet
+
+    def _stream_is_live(self, last_sample_at: float, *, max_age_seconds: float = 3.0) -> bool:
+        return last_sample_at > 0.0 and (time.monotonic() - last_sample_at) <= max_age_seconds
+
+    def _pick_preferred_stream(self, streams: list[Any]) -> Any:
+        if len(streams) <= 1:
+            return streams[0]
+        current_identity = f"{self._stream_name} {self._stream_source_id}".lower()
+        preferred = sorted(
+            streams,
+            key=lambda stream: (
+                0 if "muse" in f"{safe_stream_name(stream)} {stream_source_id(stream)}".lower() else 1,
+                0
+                if current_identity
+                and current_identity
+                in f"{safe_stream_name(stream)} {stream_source_id(stream)}".lower()
+                else 1,
+                -int(getattr(stream, "channel_count", lambda: 0)() or 0),
+            ),
+        )
+        return preferred[0]
+
+    def _pull_pairs(self, inlet: Any, *, max_samples: int, fallback_timeout: float) -> list[tuple[float, list[float]]]:
+        chunk, timestamps = inlet.pull_chunk(timeout=0.0, max_samples=max_samples)
+        if chunk and timestamps:
+            return [(stamp, list(sample)) for sample, stamp in zip(chunk, timestamps)]
+
+        sample, timestamp = inlet.pull_sample(timeout=fallback_timeout)
+        if sample is None or timestamp is None:
+            return []
+
+        pairs = [(timestamp, list(sample))]
+        for _ in range(max_samples - 1):
+            sample, timestamp = inlet.pull_sample(timeout=0.0)
+            if sample is None or timestamp is None:
+                break
+            pairs.append((timestamp, list(sample)))
+        return pairs
+
+    def _reset_inlets(self) -> None:
+        self._eeg_inlet = None
+        self._telemetry_inlet = None
+        self._acc_inlet = None
+        self._gyro_inlet = None
+
     def _try_pull_lsl(self) -> bool:
         if not self._pylsl_ready:
             self.store.set_connection(
@@ -404,9 +489,9 @@ class MuseLSLBridge:
             try:
                 streams = resolve_byprop("type", "EEG", timeout=1.0)
                 if streams:
-                    eeg_stream = streams[0]
-                    self._eeg_inlet = StreamInlet(eeg_stream, max_buflen=self.store.max_seconds)
-                    self._stream_name = eeg_stream.name() or "Muse EEG"
+                    eeg_stream = self._pick_preferred_stream(streams)
+                    self._eeg_inlet = self._build_inlet(eeg_stream, max_buflen=self.store.max_seconds)
+                    self._stream_name = safe_stream_name(eeg_stream)
                     self._stream_source_id = stream_source_id(eeg_stream)
                     sample_rate = int(eeg_stream.nominal_srate() or self.store.sample_rate_hz)
                     self.profile_key = detect_profile_key(self._stream_name, self._stream_source_id)
@@ -415,26 +500,32 @@ class MuseLSLBridge:
                         stream_mode="lsl",
                         stream_name=self._stream_name,
                         stream_source_id=self._stream_source_id,
-                        telemetry_available=self._telemetry_inlet is not None,
-                        motion_available=self._acc_inlet is not None or self._gyro_inlet is not None,
+                        telemetry_available=self._stream_is_live(self._last_telemetry_sample_at),
+                        motion_available=self._stream_is_live(self._last_acc_sample_at) or self._stream_is_live(self._last_gyro_sample_at),
                         last_error=None,
                         profile_key=self.profile_key,
                         sample_rate_hz=sample_rate,
                     )
                 telemetry_streams = resolve_byprop("type", "Telemetry", timeout=0.25)
                 if telemetry_streams:
-                    self._telemetry_inlet = StreamInlet(telemetry_streams[0], max_buflen=2)
+                    self._telemetry_inlet = self._build_inlet(
+                        self._pick_preferred_stream(telemetry_streams),
+                        max_buflen=2,
+                    )
                 acc_streams = resolve_byprop("type", "ACC", timeout=0.25)
                 if acc_streams:
-                    self._acc_inlet = StreamInlet(acc_streams[0], max_buflen=self.store.max_seconds)
+                    self._acc_inlet = self._build_inlet(
+                        self._pick_preferred_stream(acc_streams),
+                        max_buflen=self.store.max_seconds,
+                    )
                 gyro_streams = resolve_byprop("type", "GYRO", timeout=0.25)
                 if gyro_streams:
-                    self._gyro_inlet = StreamInlet(gyro_streams[0], max_buflen=self.store.max_seconds)
+                    self._gyro_inlet = self._build_inlet(
+                        self._pick_preferred_stream(gyro_streams),
+                        max_buflen=self.store.max_seconds,
+                    )
             except Exception as exc:  # pragma: no cover - depends on runtime environment
-                self._eeg_inlet = None
-                self._telemetry_inlet = None
-                self._acc_inlet = None
-                self._gyro_inlet = None
+                self._reset_inlets()
                 self.store.set_connection(
                     connected=False,
                     stream_mode="waiting",
@@ -461,40 +552,49 @@ class MuseLSLBridge:
             return False
 
         try:
-            chunk, timestamps = self._eeg_inlet.pull_chunk(timeout=0.0, max_samples=24)
-            if chunk and timestamps:
-                paired = [(stamp, list(sample)) for sample, stamp in zip(chunk, timestamps)]
-                self.store.add_samples(paired)
+            eeg_pairs = self._pull_pairs(self._eeg_inlet, max_samples=24, fallback_timeout=0.03)
+            if eeg_pairs:
+                self.store.add_samples(eeg_pairs)
+                self._last_eeg_sample_at = time.monotonic()
             if self._telemetry_inlet is not None:
-                telemetry_chunk, _ = self._telemetry_inlet.pull_chunk(timeout=0.0, max_samples=4)
-                if telemetry_chunk:
-                    self.store.update_telemetry(telemetry_chunk[-1], source="lsl-telemetry")
+                telemetry_pairs = self._pull_pairs(self._telemetry_inlet, max_samples=4, fallback_timeout=0.0)
+                if telemetry_pairs:
+                    self.store.update_telemetry(telemetry_pairs[-1][1], source="lsl-telemetry")
+                    self._last_telemetry_sample_at = time.monotonic()
             if self._acc_inlet is not None:
-                acc_chunk, acc_timestamps = self._acc_inlet.pull_chunk(timeout=0.0, max_samples=12)
-                if acc_chunk and acc_timestamps:
-                    acc_pairs = [(stamp, list(sample)) for sample, stamp in zip(acc_chunk, acc_timestamps)]
+                acc_pairs = self._pull_pairs(self._acc_inlet, max_samples=12, fallback_timeout=0.0)
+                if acc_pairs:
                     self.store.add_motion_samples("acc", acc_pairs)
+                    self._last_acc_sample_at = time.monotonic()
             if self._gyro_inlet is not None:
-                gyro_chunk, gyro_timestamps = self._gyro_inlet.pull_chunk(timeout=0.0, max_samples=12)
-                if gyro_chunk and gyro_timestamps:
-                    gyro_pairs = [(stamp, list(sample)) for sample, stamp in zip(gyro_chunk, gyro_timestamps)]
+                gyro_pairs = self._pull_pairs(self._gyro_inlet, max_samples=12, fallback_timeout=0.0)
+                if gyro_pairs:
                     self.store.add_motion_samples("gyro", gyro_pairs)
+                    self._last_gyro_sample_at = time.monotonic()
+
+            eeg_live = self._stream_is_live(self._last_eeg_sample_at, max_age_seconds=2.0)
+            telemetry_live = self._stream_is_live(self._last_telemetry_sample_at)
+            motion_live = self._stream_is_live(self._last_acc_sample_at) or self._stream_is_live(self._last_gyro_sample_at)
+
+            last_error = None
+            if not eeg_live:
+                last_error = "Connected to MuseLSL, but waiting for live EEG samples to arrive."
+                if self._last_eeg_sample_at and (time.monotonic() - self._last_eeg_sample_at) > 6.0:
+                    self._reset_inlets()
+                    return False
             self.store.set_connection(
                 connected=True,
                 stream_mode="lsl",
                 stream_name=self._stream_name,
                 stream_source_id=self._stream_source_id,
-                telemetry_available=self._telemetry_inlet is not None,
-                motion_available=self._acc_inlet is not None or self._gyro_inlet is not None,
-                last_error=None,
+                telemetry_available=telemetry_live,
+                motion_available=motion_live,
+                last_error=last_error,
                 profile_key=self.profile_key,
             )
-            return True
+            return eeg_live
         except Exception as exc:  # pragma: no cover - depends on runtime environment
-            self._eeg_inlet = None
-            self._telemetry_inlet = None
-            self._acc_inlet = None
-            self._gyro_inlet = None
+            self._reset_inlets()
             self.store.set_connection(
                 connected=False,
                 stream_mode="waiting",
@@ -523,6 +623,13 @@ def stream_source_id(stream: Any) -> str:
         return value or ""
     except Exception:
         return ""
+
+
+def safe_stream_name(stream: Any) -> str:
+    try:
+        return stream.name() or "Muse EEG"
+    except Exception:
+        return "Muse EEG"
 
 
 def build_version_info(
@@ -575,6 +682,15 @@ def build_fit_metrics(samples: list[dict[str, Any]], sample_rate_hz: int) -> dic
         return {
             "overallScore": 0,
             "overallLabel": "waiting",
+            "contactModel": "eeg-derived estimate",
+            "telemetryScope": "Headset-level telemetry only. No per-sensor voltage or wattage is available from this stream.",
+            "asymmetry": {
+                "status": "waiting",
+                "frontAverage": 0.0,
+                "rearAverage": 0.0,
+                "difference": 0.0,
+                "summary": "Waiting for enough signal to compare front and rear contact stability.",
+            },
             "channels": empty_channels,
             "officialView": {
                 "shape": "horseshoe",
@@ -590,9 +706,13 @@ def build_fit_metrics(samples: list[dict[str, Any]], sample_rate_hz: int) -> dic
         channels.append(estimate_channel_fit(channel_name, values))
 
     overall = round(fmean(channel["score"] for channel in channels), 1)
+    asymmetry = summarize_contact_asymmetry(channels)
     return {
         "overallScore": overall,
         "overallLabel": fit_label(overall),
+        "contactModel": "eeg-derived estimate",
+        "telemetryScope": "Headset-level telemetry only. No per-sensor voltage or wattage is available from this stream.",
+        "asymmetry": asymmetry,
         "channels": channels,
         "officialView": {
             "shape": "horseshoe",
@@ -634,6 +754,13 @@ def build_empty_fit_channel(channel_name: str) -> dict[str, Any]:
         "label": "waiting",
         "status": "waiting",
         "contactState": "waiting for signal",
+        "basis": "eeg-derived estimate",
+        "clipRatio": 0.0,
+        "railRatio": 0.0,
+        "driftRatio": 0.0,
+        "flatRatio": 0.0,
+        "artifactPenalty": 0.0,
+        "notes": ["Waiting for live EEG samples."],
     }
 
 
@@ -653,15 +780,38 @@ def estimate_channel_fit(channel_name: str, values: list[float]) -> dict[str, An
         if deltas
         else 1.0
     )
+    clip_ratio = estimate_clip_ratio(values)
+    rail_ratio = estimate_rail_ratio(values)
+    drift_ratio = estimate_drift_ratio(values)
+    spike_ratio = estimate_spike_ratio(values)
 
     std_component = banded_score(stddev, ideal=(6.0, 36.0), acceptable=(3.0, 70.0), maximum=40.0)
     amplitude_component = banded_score(amplitude, ideal=(18.0, 140.0), acceptable=(8.0, 210.0), maximum=35.0)
     step_component = banded_score(avg_step, ideal=(2.0, 24.0), acceptable=(0.6, 40.0), maximum=25.0)
     flat_penalty = flat_ratio * 38.0
-    score = clamp(std_component + amplitude_component + step_component - flat_penalty, 0.0, 100.0)
+    artifact_penalty = (clip_ratio * 2500.0) + (rail_ratio * 1100.0) + (drift_ratio * 44.0) + (spike_ratio * 55.0)
+    score = clamp(
+        std_component + amplitude_component + step_component - flat_penalty - artifact_penalty,
+        0.0,
+        100.0,
+    )
 
     label = fit_label(score)
-    if score >= 78:
+    notes = []
+    if clip_ratio >= 0.01:
+        notes.append("This channel is railing near the ADC limits, so the contact estimate is unreliable.")
+    if drift_ratio >= 0.22:
+        notes.append("Slow baseline drift is leaking through this channel.")
+    if flat_ratio >= 0.18:
+        notes.append("This channel is flattening out too often for a stable contact estimate.")
+    if not notes:
+        notes.append("EEG-derived contact estimate looks stable enough for this channel.")
+
+    if clip_ratio >= 0.01 or rail_ratio >= 0.02:
+        contact_state = "railed / unstable"
+    elif drift_ratio >= 0.24:
+        contact_state = "drifty contact"
+    elif score >= 78:
         contact_state = "stable contact"
     elif score >= 58:
         contact_state = "good contact"
@@ -676,9 +826,67 @@ def estimate_channel_fit(channel_name: str, values: list[float]) -> dict[str, An
         "label": label,
         "status": sensor_status(score),
         "contactState": contact_state,
+        "basis": "eeg-derived estimate",
         "signalSpreadUv": round(stddev, 2),
         "peakToPeakUv": round(amplitude, 2),
         "movementIndex": round(avg_step, 2),
+        "clipRatio": round(clip_ratio, 3),
+        "railRatio": round(rail_ratio, 3),
+        "driftRatio": round(drift_ratio, 3),
+        "flatRatio": round(flat_ratio, 3),
+        "artifactPenalty": round(artifact_penalty, 1),
+        "notes": notes,
+    }
+
+
+def summarize_contact_asymmetry(channels: list[dict[str, Any]]) -> dict[str, Any]:
+    if not channels:
+        return {
+            "status": "waiting",
+            "frontAverage": 0.0,
+            "rearAverage": 0.0,
+            "difference": 0.0,
+            "summary": "Waiting for enough signal to compare front and rear contact stability.",
+        }
+
+    front_scores = [channel.get("score", 0.0) for channel in channels if channel["channel"] in FRONT_CHANNELS]
+    rear_scores = [channel.get("score", 0.0) for channel in channels if channel["channel"] in REAR_CHANNELS]
+    if not front_scores or not rear_scores:
+        return {
+            "status": "partial",
+            "frontAverage": round(fmean(front_scores), 1) if front_scores else 0.0,
+            "rearAverage": round(fmean(rear_scores), 1) if rear_scores else 0.0,
+            "difference": 0.0,
+            "summary": "Need both frontal and rear sensors before comparing asymmetry.",
+        }
+
+    front_average = round(fmean(front_scores), 1)
+    rear_average = round(fmean(rear_scores), 1)
+    difference = round(front_average - rear_average, 1)
+    if difference >= 12.0:
+        status = "rear-weaker"
+        summary = (
+            "Rear contact looks weaker or noisier than the frontal sensors. "
+            "This is an EEG-derived estimate, not a measured rear-sensor voltage or wattage reading."
+        )
+    elif difference <= -12.0:
+        status = "front-weaker"
+        summary = (
+            "Frontal contact looks weaker or noisier than the rear sensors. "
+            "This is inferred from EEG behavior, not from per-sensor hardware telemetry."
+        )
+    else:
+        status = "balanced"
+        summary = (
+            "Front and rear contact estimates are reasonably balanced. "
+            "These values are inferred from EEG stability rather than direct impedance telemetry."
+        )
+    return {
+        "status": status,
+        "frontAverage": front_average,
+        "rearAverage": rear_average,
+        "difference": difference,
+        "summary": summary,
     }
 
 
@@ -750,6 +958,15 @@ def build_signal_metrics(
                 "score": 0.0,
                 "label": "waiting",
             },
+            "aggregate": {
+                "withheld": True,
+                "sourceMode": "withheld",
+                "selectedChannels": [],
+                "sourceSensors": [],
+                "cleanSensorCount": 0,
+                "reasons": ["Waiting for live EEG samples."],
+                "summary": "Overall brain-state output is waiting for live EEG samples.",
+            },
         }
 
     bands = compute_band_mix(
@@ -766,16 +983,19 @@ def build_signal_metrics(
         motion_metrics=motion_metrics,
         continuity=continuity,
     )
-    overall_bands = compute_overall_band_mix(bands)
-    delta_dominance = assess_delta_dominance(overall_bands, quality)
+    aggregate = select_aggregate_channels(bands)
+    overall_bands = compute_overall_band_mix(aggregate["selectedChannels"])
+    dominant_band = max(overall_bands, key=overall_bands.get) if aggregate["selectedChannels"] else "waiting"
+    delta_dominance = assess_delta_dominance(overall_bands, quality, aggregate)
     return {
         "bands": bands,
         "moments": moments,
         "overallBands": overall_bands,
-        "dominantBand": max(overall_bands, key=overall_bands.get) if overall_bands else "waiting",
+        "dominantBand": dominant_band,
         "quality": quality,
         "deltaDominance": delta_dominance,
         "continuity": continuity,
+        "aggregate": aggregate,
     }
 
 
@@ -901,6 +1121,247 @@ def describe_motion(stability: float) -> str:
     return "too much motion"
 
 
+def build_baseline_point(
+    *,
+    signal_metrics: dict[str, Any],
+    fit_metrics: dict[str, Any],
+    motion_metrics: dict[str, Any],
+    latest_timestamp: float,
+) -> dict[str, Any] | None:
+    overall_bands = signal_metrics.get("overallBands") or {}
+    quality = signal_metrics.get("quality") or {}
+    continuity = signal_metrics.get("continuity") or {}
+    if not overall_bands:
+        return None
+
+    aggregate = signal_metrics.get("aggregate") or {}
+    delta = float(overall_bands.get("delta", 0.0))
+    theta = float(overall_bands.get("theta", 0.0))
+    alpha = float(overall_bands.get("alpha", 0.0))
+    beta = float(overall_bands.get("beta", 0.0))
+    gamma = float(overall_bands.get("gamma", 0.0))
+    accuracy = float(quality.get("accuracyScore", 0.0))
+    fit_score = float(fit_metrics.get("overallScore", 0.0))
+    motion_score = float(motion_metrics.get("stabilityScore", 65.0 if not motion_metrics.get("available") else 0.0))
+    continuity_score = float(continuity.get("score", 0.0))
+    calm_index = clamp(55.0 + (alpha * 0.55) + (theta * 0.18) - (beta * 0.18) - (delta * 0.48), 0.0, 100.0)
+    focus_index = clamp(50.0 + (beta * 0.9) + (alpha * 0.38) + (gamma * 0.12) - (delta * 0.78) - (theta * 0.25), 0.0, 100.0)
+    quality_anchor = clamp(
+        (accuracy * 0.52) + (fit_score * 0.2) + (motion_score * 0.18) + (continuity_score * 0.1),
+        0.0,
+        100.0,
+    )
+    accepted_for_baseline = (
+        not aggregate.get("withheld", False)
+        and accuracy >= 64.0
+        and fit_score >= 40.0
+        and motion_score >= 55.0
+        and continuity_score >= 74.0
+        and signal_metrics.get("deltaDominance", {}).get("status") != "strong"
+    )
+    eligible_normal = accepted_for_baseline and accuracy >= 68.0 and continuity_score >= 80.0
+
+    return {
+        "timestamp": round(latest_timestamp, 4),
+        "capturedAt": utc_now(),
+        "bands": {name: round(float(overall_bands.get(name, 0.0)), 1) for name, _, _ in BAND_DEFS},
+        "dominantBand": signal_metrics.get("dominantBand", "waiting"),
+        "accuracyScore": round(accuracy, 1),
+        "fitScore": round(fit_score, 1),
+        "motionScore": round(motion_score, 1),
+        "continuityScore": round(continuity_score, 1),
+        "qualityAnchor": round(quality_anchor, 1),
+        "focusIndex": round(focus_index, 1),
+        "calmIndex": round(calm_index, 1),
+        "acceptedForBaseline": accepted_for_baseline,
+        "eligibleNormal": eligible_normal,
+        "sourceMode": aggregate.get("sourceMode", "withheld"),
+        "cleanSensorCount": int(aggregate.get("cleanSensorCount", 0)),
+    }
+
+
+def build_baseline_metrics(
+    *,
+    history: list[dict[str, Any]],
+    current_point: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not history and not current_point:
+        return empty_baseline_metrics()
+
+    points = list(history)
+    if current_point and (not points or points[-1]["timestamp"] != current_point["timestamp"]):
+        points.append(current_point)
+
+    if not points:
+        return empty_baseline_metrics()
+
+    current = current_point or points[-1]
+    accepted_points = [point for point in points if point.get("acceptedForBaseline", True)]
+    pool = accepted_points or []
+    duration_seconds = max(0.0, pool[-1]["timestamp"] - pool[0]["timestamp"]) if len(pool) > 1 else 0.0
+    normal_points = [point for point in pool if point.get("eligibleNormal")]
+    baseline_pool = normal_points or pool
+
+    focused_points = []
+    if baseline_pool:
+        sorted_by_focus = sorted(baseline_pool, key=lambda point: point.get("focusIndex", 0.0), reverse=True)
+        focused_take = max(1, min(len(sorted_by_focus), max(3, len(sorted_by_focus) // 3)))
+        focused_points = sorted_by_focus[:focused_take]
+
+    normal_summary = summarize_baseline_cluster(baseline_pool)
+    focused_summary = summarize_baseline_cluster(focused_points or baseline_pool)
+    confidence = clamp(
+        min(duration_seconds / 90.0, 1.0) * 32.0
+        + min(len(baseline_pool) / 36.0, 1.0) * 24.0
+        + normal_summary["accuracyScore"] * 0.24
+        + normal_summary["fitScore"] * 0.12
+        + normal_summary["motionScore"] * 0.08,
+        0.0,
+        100.0,
+    )
+    trend_history = [
+        {
+            "timestamp": point["capturedAt"],
+            "focusIndex": point["focusIndex"],
+            "qualityAnchor": point["qualityAnchor"],
+        }
+        for point in pool[-90:]
+    ]
+
+    if len(pool) < MIN_BASELINE_WINDOWS or duration_seconds < MIN_BASELINE_DURATION_SECONDS:
+        return {
+            **empty_baseline_metrics(),
+            "available": False,
+            "windowCount": len(pool),
+            "durationSeconds": round(duration_seconds, 1),
+            "confidenceScore": round(confidence, 1),
+            "confidenceLabel": fit_label(confidence),
+            "current": current,
+            "history": trend_history,
+            "note": (
+                "Baseline learning is only using accepted clean windows. "
+                "Keep the signal stable for about 45-60 seconds so normal and focused baselines mature."
+            ),
+        }
+
+    return {
+        "available": True,
+        "windowCount": len(pool),
+        "durationSeconds": round(duration_seconds, 1),
+        "confidenceScore": round(confidence, 1),
+        "confidenceLabel": fit_label(confidence),
+        "current": current,
+        "normal": normal_summary,
+        "focused": focused_summary,
+        "vsNormal": compare_to_baseline(current, normal_summary, baseline_name="normal"),
+        "vsFocused": compare_to_baseline(current, focused_summary, baseline_name="focused"),
+        "history": trend_history,
+        "note": (
+            f"Normal baseline uses {len(baseline_pool)} accepted clean windows; focused baseline keeps the most "
+            f"alpha/beta-leaning {len(focused_points or baseline_pool)} clean windows from the last {round(duration_seconds)} seconds."
+        ),
+    }
+
+
+def empty_baseline_metrics() -> dict[str, Any]:
+    empty_state = {
+        "dominantBand": "waiting",
+        "bands": {name: 0.0 for name, _, _ in BAND_DEFS},
+        "accuracyScore": 0.0,
+        "fitScore": 0.0,
+        "motionScore": 0.0,
+        "continuityScore": 0.0,
+        "qualityAnchor": 0.0,
+        "focusIndex": 0.0,
+        "calmIndex": 0.0,
+    }
+    return {
+        "available": False,
+        "windowCount": 0,
+        "durationSeconds": 0.0,
+        "confidenceScore": 0.0,
+        "confidenceLabel": "waiting",
+        "current": empty_state,
+        "normal": empty_state,
+        "focused": empty_state,
+        "vsNormal": empty_baseline_comparison("normal"),
+        "vsFocused": empty_baseline_comparison("focused"),
+        "history": [],
+        "note": "Waiting for enough stable EEG to build rolling baselines.",
+    }
+
+
+def summarize_baseline_cluster(points: list[dict[str, Any]]) -> dict[str, Any]:
+    if not points:
+        return empty_baseline_metrics()["normal"]
+
+    bands = {
+        name: round(fmean(point["bands"].get(name, 0.0) for point in points), 1)
+        for name, _, _ in BAND_DEFS
+    }
+    dominant_band = max(bands, key=bands.get) if bands else "waiting"
+    return {
+        "dominantBand": dominant_band,
+        "bands": bands,
+        "accuracyScore": round(fmean(point.get("accuracyScore", 0.0) for point in points), 1),
+        "fitScore": round(fmean(point.get("fitScore", 0.0) for point in points), 1),
+        "motionScore": round(fmean(point.get("motionScore", 0.0) for point in points), 1),
+        "continuityScore": round(fmean(point.get("continuityScore", 0.0) for point in points), 1),
+        "qualityAnchor": round(fmean(point.get("qualityAnchor", 0.0) for point in points), 1),
+        "focusIndex": round(fmean(point.get("focusIndex", 0.0) for point in points), 1),
+        "calmIndex": round(fmean(point.get("calmIndex", 0.0) for point in points), 1),
+    }
+
+
+def compare_to_baseline(current: dict[str, Any], baseline: dict[str, Any], *, baseline_name: str) -> dict[str, Any]:
+    if not current or not baseline or baseline.get("dominantBand") == "waiting":
+        return empty_baseline_comparison(baseline_name)
+
+    delta_shift = round(current["bands"].get("delta", 0.0) - baseline["bands"].get("delta", 0.0), 1)
+    alpha_shift = round(current["bands"].get("alpha", 0.0) - baseline["bands"].get("alpha", 0.0), 1)
+    beta_shift = round(current["bands"].get("beta", 0.0) - baseline["bands"].get("beta", 0.0), 1)
+    focus_shift = round(current.get("focusIndex", 0.0) - baseline.get("focusIndex", 0.0), 1)
+
+    if focus_shift >= 8.0:
+        status = "more focused"
+    elif focus_shift <= -8.0:
+        status = "less focused"
+    else:
+        status = "close"
+
+    if baseline_name == "focused":
+        summary = (
+            f"Current focus index is {abs(focus_shift):.0f} points {'above' if focus_shift >= 0 else 'below'} "
+            f"your focused baseline, with delta {abs(delta_shift):.0f} points {'lower' if delta_shift <= 0 else 'higher'}."
+        )
+    else:
+        summary = (
+            f"Current activity is {status} than your normal baseline, with alpha {abs(alpha_shift):.0f} points "
+            f"{'higher' if alpha_shift >= 0 else 'lower'} and beta {abs(beta_shift):.0f} points "
+            f"{'higher' if beta_shift >= 0 else 'lower'}."
+        )
+
+    return {
+        "status": status,
+        "summary": summary,
+        "focusShift": focus_shift,
+        "alphaShift": alpha_shift,
+        "betaShift": beta_shift,
+        "deltaShift": delta_shift,
+    }
+
+
+def empty_baseline_comparison(baseline_name: str) -> dict[str, Any]:
+    return {
+        "status": "waiting",
+        "summary": f"Waiting for a {baseline_name} baseline to compare against.",
+        "focusShift": 0.0,
+        "alphaShift": 0.0,
+        "betaShift": 0.0,
+        "deltaShift": 0.0,
+    }
+
+
 def build_calibration_guidance(
     *,
     fit_metrics: dict[str, Any],
@@ -908,6 +1369,7 @@ def build_calibration_guidance(
     signal_metrics: dict[str, Any],
     battery: BatteryState,
     telemetry_available: bool,
+    baseline_metrics: dict[str, Any],
 ) -> dict[str, Any]:
     guidance = []
     score = 100.0
@@ -916,7 +1378,7 @@ def build_calibration_guidance(
         score -= 28.0
         guidance.append("Re-seat the headset so TP9 and TP10 sit flat against the skin and move hair away from the sensors.")
     else:
-        guidance.append("Sensor fit looks usable; keep the band pressure consistent while you record.")
+        guidance.append("Estimated contact looks usable; keep the band pressure consistent while you record.")
 
     if motion_metrics["available"] and motion_metrics["stabilityScore"] < 65:
         score -= 24.0
@@ -936,7 +1398,10 @@ def build_calibration_guidance(
         score -= 16.0 if delta_status == "elevated" else 24.0
         guidance.append(signal_metrics["deltaDominance"]["warning"])
     else:
-        guidance.append("Overall band balance does not look artificially delta-heavy right now.")
+        if signal_metrics.get("aggregate", {}).get("withheld"):
+            guidance.append("The combined brain-state view is withheld until more clean sensors stay stable.")
+        else:
+            guidance.append("Overall band balance does not look artificially delta-heavy right now.")
 
     quality_metrics = signal_metrics["quality"]
     if quality_metrics["artifactScore"] < 60 or quality_metrics["agreementScore"] < 58:
@@ -952,6 +1417,12 @@ def build_calibration_guidance(
     if quality_metrics.get("stabilityScore", 100.0) < 60:
         score -= 10.0
         guidance.append("The EEG window is shifting within a second or two; hold still and give the headset another calm baseline window.")
+
+    if baseline_metrics.get("available"):
+        guidance.append(baseline_metrics["vsFocused"]["summary"])
+    else:
+        score -= 6.0
+        guidance.append("Keep recording clean windows for another 45-60 seconds so the dashboard can build your normal and focused baselines.")
 
     if not telemetry_available:
         score -= 8.0
@@ -995,18 +1466,18 @@ def compute_continuity(samples: list[dict[str, Any]], sample_rate_hz: int) -> di
 
 
 def compute_overall_band_mix(channels: list[dict[str, Any]]) -> dict[str, float]:
-    if not channels:
+    admitted = [channel for channel in channels if channel.get("admitted", channel.get("usable", False))]
+    if not admitted:
         return {name: 0.0 for name, _, _ in BAND_DEFS}
-    total_weight = sum(max(channel.get("qualityWeight", 0.0), 0.0) for channel in channels)
-    use_uniform_weight = total_weight <= 0
+    total_weight = sum(max(channel.get("qualityWeight", 0.0), 0.0) for channel in admitted)
     if total_weight <= 0:
-        total_weight = float(len(channels))
+        return {name: 0.0 for name, _, _ in BAND_DEFS}
     return {
         name: round(
             sum(
                 channel["mix"].get(name, 0.0)
-                * (1.0 if use_uniform_weight else max(channel.get("qualityWeight", 0.0), 0.0))
-                for channel in channels
+                * max(channel.get("qualityWeight", 0.0), 0.0)
+                for channel in admitted
             )
             / total_weight,
             1,
@@ -1047,8 +1518,10 @@ def compute_signal_quality(
     contact_score = round(fmean(channel.get("fitScore", 0.0) for channel in channels), 1)
     stability_score = round(fmean(channel.get("splitHalfScore", 0.0) for channel in channels), 1)
     usable_channels = sum(1 for channel in channels if channel.get("usable", False))
+    admitted_channels = sum(1 for channel in channels if channel.get("admitted", False))
+    clean_window_coverage = round((admitted_channels / max(len(channels), 1)) * 100.0, 1)
 
-    overall = compute_overall_band_mix(channels)
+    overall = compute_overall_band_mix([channel for channel in channels if channel.get("admitted", False)])
     divergences = []
     for channel in channels:
         divergence = sum(abs(channel["mix"].get(name, 0.0) - overall.get(name, 0.0)) for name, _, _ in BAND_DEFS)
@@ -1083,7 +1556,7 @@ def compute_signal_quality(
         motion_metrics=motion_metrics,
     )
     summary = (
-        f"{usable_channels} of {len(channels)} channels look usable. Accuracy {composite:.0f}% with "
+        f"{admitted_channels} of {len(channels)} channels are admitted into the aggregate view and {usable_channels} remain usable overall. Accuracy {composite:.0f}% with "
         f"artifact {artifact_score:.0f}%, agreement {agreement_score:.0f}%, line-noise rejection {line_noise_score:.0f}%, "
         f"and contact confidence {contact_score:.0f}%."
     )
@@ -1097,13 +1570,20 @@ def compute_signal_quality(
         "motionScore": motion_score,
         "accuracyScore": round(clamp(composite, 0.0, 100.0), 1),
         "usableChannelCount": usable_channels,
+        "admittedChannelCount": admitted_channels,
+        "cleanWindowCoverage": clean_window_coverage,
+        "minimumCombinedChannels": MIN_COMBINED_CLEAN_CHANNELS,
         "label": fit_label(composite),
         "summary": summary,
         "blockers": blockers,
     }
 
 
-def assess_delta_dominance(overall_bands: dict[str, float], quality_metrics: dict[str, Any]) -> dict[str, Any]:
+def assess_delta_dominance(
+    overall_bands: dict[str, float],
+    quality_metrics: dict[str, Any],
+    aggregate: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     delta = overall_bands.get("delta", 0.0)
     alpha = overall_bands.get("alpha", 0.0)
     beta = overall_bands.get("beta", 0.0)
@@ -1114,12 +1594,24 @@ def assess_delta_dominance(overall_bands: dict[str, float], quality_metrics: dic
         quality_metrics.get("artifactScore", 100.0) < 60
         or quality_metrics.get("agreementScore", 100.0) < 55
         or quality_metrics.get("accuracyScore", 100.0) < 58
+        or quality_metrics.get("contactScore", 100.0) < 55
     )
+    aggregate = aggregate or {}
+    if aggregate.get("withheld"):
+        return {
+            "score": round(delta, 1),
+            "ratio": ratio,
+            "status": "waiting",
+            "warning": "Delta judgment is withheld until enough clean sensors stay stable.",
+            "alphaBetaSupport": round(alpha + beta, 1),
+        }
+    if aggregate.get("sourceMode") == "frontal-only":
+        low_quality = low_quality or quality_metrics.get("admittedChannelCount", 0) < MIN_COMBINED_CLEAN_CHANNELS
 
     if delta >= 48 or ratio >= 0.72:
         status = "strong"
         if low_quality:
-            warning = "Delta is dominating and the channels disagree after preprocessing; this is more likely contact drift or motion than a trustworthy baseline."
+            warning = "Delta looks elevated, but the surrounding signal quality is too weak to trust it as a real awake-state conclusion."
         else:
             warning = "Delta is dominating the combined brain-wave view; this often means weak contact, motion, or a very drowsy baseline."
     elif delta >= 38 or ratio >= 0.5:
@@ -1150,6 +1642,7 @@ def build_brain_state(
     dominant_band = signal_metrics["dominantBand"]
     delta_dominance = signal_metrics["deltaDominance"]
     quality_metrics = signal_metrics["quality"]
+    aggregate = signal_metrics.get("aggregate") or select_aggregate_channels(signal_metrics.get("bands", []))
     plausibility = clamp(
         100.0
         - max(0.0, delta_dominance["score"] - 34.0) * 1.1
@@ -1173,6 +1666,10 @@ def build_brain_state(
         0.0,
         100.0,
     )
+    if aggregate.get("sourceMode") == "frontal-only":
+        plausibility = clamp(plausibility - 8.0, 0.0, 100.0)
+    if aggregate.get("withheld"):
+        plausibility = 0.0
     return {
         "overallBands": overall_bands,
         "dominantBand": dominant_band,
@@ -1180,6 +1677,11 @@ def build_brain_state(
         "quality": quality_metrics,
         "plausibilityScore": round(plausibility, 1),
         "plausibilityLabel": fit_label(plausibility),
+        "withheld": bool(aggregate.get("withheld")),
+        "withheldReasons": list(aggregate.get("reasons", [])),
+        "sourceMode": aggregate.get("sourceMode", "withheld"),
+        "sourceSensors": list(aggregate.get("sourceSensors", [])),
+        "summary": aggregate.get("summary", "Waiting for enough clean signal."),
     }
 
 
@@ -1190,11 +1692,12 @@ def compute_band_mix(
     fit_metrics: dict[str, Any] | None,
     motion_metrics: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    window = samples[-min(len(samples), max(sample_rate_hz, 64)) :]
+    window = samples[-min(len(samples), max(sample_rate_hz * 2, 192)) :]
     fit_scores = {
         channel["channel"]: float(channel.get("score", 0.0))
         for channel in (fit_metrics or {}).get("channels", [])
     }
+    has_fit_scores = bool(fit_scores)
     motion_penalty = 0.0
     if motion_metrics and motion_metrics.get("available"):
         motion_penalty = max(0.0, 100.0 - float(motion_metrics.get("stabilityScore", 100.0)))
@@ -1203,29 +1706,49 @@ def compute_band_mix(
         raw_series = [sample["values"][channel_index] for sample in window]
         sanitized = clip_outliers(raw_series)
         series = preprocess_band_series(sanitized, sample_rate_hz)
-        drift_ratio = estimate_drift_ratio(raw_series)
+        raw_drift_ratio = estimate_drift_ratio(raw_series)
+        drift_ratio = max(estimate_drift_ratio(series), raw_drift_ratio * 0.25)
         spike_ratio = estimate_spike_ratio(raw_series)
         flat_ratio = estimate_flat_ratio(raw_series)
+        clip_ratio = estimate_clip_ratio(raw_series)
+        rail_ratio = estimate_rail_ratio(raw_series)
         mix, grand_total = compute_band_distribution(series, sample_rate_hz)
         line_noise_ratio = estimate_line_noise_ratio(sanitized, sample_rate_hz)
         split_half_score = estimate_split_half_score(sanitized, sample_rate_hz)
-        fit_score = round(fit_scores.get(channel_name, 0.0), 1)
-        line_noise_score = round(clamp(100.0 - (line_noise_ratio * 240.0), 0.0, 100.0), 1)
+        fit_score = round(fit_scores.get(channel_name, 50.0 if not has_fit_scores else 0.0), 1)
+        line_noise_score = round(clamp(100.0 - (math.log10(1.0 + line_noise_ratio) * 34.0), 0.0, 100.0), 1)
+        line_noise_penalty = max(0.0, 72.0 - line_noise_score) * 0.65
+        delta_suspect = mix.get("delta", 0.0) >= 42.0 and (
+            raw_drift_ratio >= 0.22 or clip_ratio >= 0.008 or rail_ratio >= 0.015
+        )
+        hard_reject_reasons = build_channel_reject_reasons(
+            channel_name=channel_name,
+            clip_ratio=clip_ratio,
+            rail_ratio=rail_ratio,
+            drift_ratio=raw_drift_ratio,
+            flat_ratio=flat_ratio,
+            split_half_score=split_half_score,
+            fit_score=fit_score,
+        )
         quality_weight = round(
             clamp(
                 100.0
                 - (drift_ratio * 34.0)
                 - (spike_ratio * 118.0)
                 - (flat_ratio * 55.0)
-                - (line_noise_ratio * 240.0)
+                - (clip_ratio * 2600.0)
+                - (rail_ratio * 1200.0)
+                - line_noise_penalty
                 - max(0.0, 58.0 - fit_score) * 0.32
                 - max(0.0, 62.0 - split_half_score) * 0.28
+                - (16.0 if delta_suspect else 0.0)
                 - (motion_penalty * 0.14),
                 0.0,
                 100.0,
             ),
             1,
         )
+        admitted = not hard_reject_reasons and quality_weight >= 58.0
         results.append(
             {
                 "channel": channel_name,
@@ -1233,16 +1756,101 @@ def compute_band_mix(
                 "bandPower": round(grand_total, 3),
                 "qualityWeight": quality_weight,
                 "driftRatio": round(drift_ratio, 3),
+                "rawDriftRatio": round(raw_drift_ratio, 3),
                 "spikeRatio": round(spike_ratio, 3),
                 "flatRatio": round(flat_ratio, 3),
+                "clipRatio": round(clip_ratio, 3),
+                "railRatio": round(rail_ratio, 3),
                 "lineNoiseRatio": round(line_noise_ratio, 3),
                 "lineNoiseScore": line_noise_score,
                 "splitHalfScore": round(split_half_score, 1),
                 "fitScore": fit_score,
-                "usable": quality_weight >= 55.0,
+                "deltaSuspect": delta_suspect,
+                "rejectReasons": hard_reject_reasons,
+                "admitted": admitted,
+                "usable": admitted and quality_weight >= 62.0,
             }
         )
     return results
+
+
+def build_channel_reject_reasons(
+    *,
+    channel_name: str,
+    clip_ratio: float,
+    rail_ratio: float,
+    drift_ratio: float,
+    flat_ratio: float,
+    split_half_score: float,
+    fit_score: float,
+) -> list[str]:
+    reasons = []
+    if clip_ratio >= 0.01 or rail_ratio >= 0.02:
+        reasons.append(f"{channel_name} is clipping or railing too often.")
+    if drift_ratio >= 0.75:
+        reasons.append(f"{channel_name} has too much low-frequency drift.")
+    if flat_ratio >= 0.22:
+        reasons.append(f"{channel_name} is flattening too often to trust.")
+    if split_half_score < 45.0:
+        reasons.append(f"{channel_name} is not stable across the window.")
+    if fit_score < 30.0:
+        reasons.append(f"{channel_name} has very weak estimated contact.")
+    return reasons
+
+
+def select_aggregate_channels(channels: list[dict[str, Any]]) -> dict[str, Any]:
+    admitted = [channel for channel in channels if channel.get("admitted", False)]
+    front = [channel for channel in admitted if channel["channel"] in FRONT_CHANNELS]
+    rear = [channel for channel in admitted if channel["channel"] in REAR_CHANNELS]
+    rejected = [channel for channel in channels if not channel.get("admitted", False)]
+    reasons = []
+
+    clipping_rejected = [
+        channel["channel"]
+        for channel in rejected
+        if channel.get("clipRatio", 0.0) >= 0.01 or channel.get("railRatio", 0.0) >= 0.02
+    ]
+    if clipping_rejected:
+        reasons.append(f"Withheld due to clipping on {', '.join(clipping_rejected)}.")
+
+    rear_rejected = [channel["channel"] for channel in rejected if channel["channel"] in REAR_CHANNELS]
+    if len(rear_rejected) == len(REAR_CHANNELS):
+        reasons.append("Withheld due to rear contact instability.")
+
+    if len(admitted) >= MIN_COMBINED_CLEAN_CHANNELS:
+        return {
+            "withheld": False,
+            "sourceMode": "combined",
+            "selectedChannels": admitted,
+            "sourceSensors": [channel["channel"] for channel in admitted],
+            "cleanSensorCount": len(admitted),
+            "reasons": reasons,
+            "summary": f"Combined view uses {len(admitted)} admitted sensors.",
+        }
+
+    if len(front) == len(FRONT_CHANNELS) and len(rear) < len(REAR_CHANNELS):
+        fallback_reasons = list(reasons)
+        fallback_reasons.append("Rear contact instability triggered a frontal-only fallback.")
+        return {
+            "withheld": False,
+            "sourceMode": "frontal-only",
+            "selectedChannels": front,
+            "sourceSensors": [channel["channel"] for channel in front],
+            "cleanSensorCount": len(front),
+            "reasons": fallback_reasons,
+            "summary": "Frontal-only fallback is active because the rear sensors are not clean enough.",
+        }
+
+    reasons.append("Withheld due to low clean-window coverage.")
+    return {
+        "withheld": True,
+        "sourceMode": "withheld",
+        "selectedChannels": [],
+        "sourceSensors": [],
+        "cleanSensorCount": len(admitted),
+        "reasons": reasons[:3],
+        "summary": "Overall brain-state output is withheld until more clean sensors remain stable.",
+    }
 
 
 def summarize_quality_blockers(
@@ -1261,11 +1869,13 @@ def summarize_quality_blockers(
     blockers = []
     if artifact_score < 60:
         blockers.append("Artifacts are still elevated after preprocessing.")
+    if fit_metrics and fit_metrics.get("asymmetry", {}).get("status") == "rear-weaker":
+        blockers.append("Rear sensors look weaker or noisier than the frontal pair.")
     if agreement_score < 58:
         blockers.append("Channels still disagree on the band balance.")
     if drift_score < 62:
         blockers.append("Slow baseline drift is still leaking into the EEG window.")
-    if line_noise_score < 60:
+    if line_noise_score < 95:
         blockers.append("Line noise is leaking into the spectrum; move away from chargers and noisy cables.")
     if contact_score < 60:
         blockers.append("Sensor contact is too uneven to fully trust the combined brain-state view.")
@@ -1388,13 +1998,24 @@ def preprocess_base_series(series: list[float], sample_rate_hz: int) -> list[flo
         for index, value in enumerate(centered)
     ]
     dt = 1.0 / max(sample_rate_hz, 1)
-    alpha = clamp(dt / (0.45 + dt), 0.02, 0.18)
-    baseline = detrended[0]
-    filtered: list[float] = []
-    for value in detrended:
-        baseline += alpha * (value - baseline)
-        filtered.append(value - baseline)
-    return filtered
+    cutoff_hz = 0.9
+    rc = 1.0 / max(2.0 * math.pi * cutoff_hz, 1e-6)
+    alpha = clamp(rc / (rc + dt), 0.65, 0.995)
+    filtered: list[float] = [detrended[0]]
+    previous_input = detrended[0]
+    previous_output = detrended[0]
+    for value in detrended[1:]:
+        output = alpha * (previous_output + value - previous_input)
+        filtered.append(output)
+        previous_input = value
+        previous_output = output
+    baseline_alpha = clamp(dt / (0.22 + dt), 0.02, 0.18)
+    baseline = filtered[0]
+    cleaned: list[float] = []
+    for value in filtered:
+        baseline += baseline_alpha * (value - baseline)
+        cleaned.append(value - baseline)
+    return cleaned
 
 
 def estimate_split_half_score(series: list[float], sample_rate_hz: int) -> float:
@@ -1417,6 +2038,18 @@ def estimate_drift_ratio(series: list[float]) -> float:
     start_mean = fmean(series[:quarter])
     end_mean = fmean(series[-quarter:])
     return clamp(abs(end_mean - start_mean) / amplitude, 0.0, 2.0)
+
+
+def estimate_clip_ratio(series: list[float]) -> float:
+    if len(series) < 8:
+        return 1.0
+    return sum(1 for value in series if abs(value) >= 950.0) / len(series)
+
+
+def estimate_rail_ratio(series: list[float]) -> float:
+    if len(series) < 8:
+        return 1.0
+    return sum(1 for value in series if abs(value) >= 900.0) / len(series)
 
 
 def estimate_spike_ratio(series: list[float]) -> float:
