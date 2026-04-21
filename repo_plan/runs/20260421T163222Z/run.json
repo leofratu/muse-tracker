@@ -1,0 +1,31 @@
+{
+  "task_id": "accuracy-remediation-plan-2026-04-21",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.backend.signal_intelligence",
+      "interface.backend.signal_admission_gating",
+      "interface.backend.truthful_fit_contact",
+      "interface.backend.signal_preprocessing_accuracy",
+      "interface.backend.baseline_state_model",
+      "interface.backend.aggregate_brain_state",
+      "interface.frontend.truthful_state_gating",
+      "interface.frontend.live_visuals"
+    ],
+    "files": [
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/backend/tests/test_app.py",
+      "apps/frontend/app.js",
+      "apps/frontend/index.html",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ]
+  },
+  "tests": [],
+  "implemented_interfaces": [],
+  "tested_interfaces": [],
+  "elapsed_s": 0,
+  "tool_calls_count": 5,
+  "notes": "Planning-only run. RPG updated first to sequence accuracy remediation before implementation. No product code changed in this run."
+}

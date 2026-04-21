@@ -1,0 +1,81 @@
+{
+  "task_id": "accuracy-remediation-implementation-2026-04-21",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.backend.signal_intelligence",
+      "interface.backend.signal_admission_gating",
+      "interface.backend.truthful_fit_contact",
+      "interface.backend.signal_preprocessing_accuracy",
+      "interface.backend.baseline_state_model",
+      "interface.backend.aggregate_brain_state",
+      "interface.frontend.truthful_state_gating",
+      "interface.frontend.live_visuals"
+    ],
+    "files": [
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/backend/tests/test_app.py",
+      "apps/frontend/app.js",
+      "apps/frontend/index.html",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "python3 -m py_compile apps/backend/muse_lsl_bridge.py apps/backend/app.py apps/backend/tests/test_app.py",
+      "ok": true,
+      "interfaces": ["interface.backend.signal_admission_gating", "interface.backend.signal_preprocessing_accuracy"]
+    },
+    {
+      "cmd": "node --check apps/frontend/app.js",
+      "ok": true,
+      "interfaces": ["interface.frontend.truthful_state_gating", "interface.frontend.live_visuals"]
+    },
+    {
+      "cmd": ".venv/bin/python -m pytest apps/backend/tests/test_app.py",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.signal_intelligence",
+        "interface.backend.signal_admission_gating",
+        "interface.backend.truthful_fit_contact",
+        "interface.backend.signal_preprocessing_accuracy",
+        "interface.backend.baseline_state_model",
+        "interface.backend.aggregate_brain_state"
+      ]
+    },
+    {
+      "cmd": "python3 - <<'PY' ... live /api/status review ... PY",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.truthful_fit_contact",
+        "interface.backend.aggregate_brain_state",
+        "interface.frontend.truthful_state_gating"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "interface.backend.signal_intelligence",
+    "interface.backend.signal_admission_gating",
+    "interface.backend.truthful_fit_contact",
+    "interface.backend.signal_preprocessing_accuracy",
+    "interface.backend.baseline_state_model",
+    "interface.backend.aggregate_brain_state",
+    "interface.frontend.truthful_state_gating",
+    "interface.frontend.live_visuals"
+  ],
+  "tested_interfaces": [
+    "interface.backend.signal_intelligence",
+    "interface.backend.signal_admission_gating",
+    "interface.backend.truthful_fit_contact",
+    "interface.backend.signal_preprocessing_accuracy",
+    "interface.backend.baseline_state_model",
+    "interface.backend.aggregate_brain_state",
+    "interface.frontend.truthful_state_gating",
+    "interface.frontend.live_visuals"
+  ],
+  "elapsed_s": 0,
+  "tool_calls_count": 0,
+  "notes": "Implemented hard signal rejection, truthful EEG-derived contact semantics, frontal-only fallback, baseline clean-window gating, frontend withholding, and regression coverage. Live review confirms the backend now withholds misleading aggregate output when rear sensors are unstable."
+}

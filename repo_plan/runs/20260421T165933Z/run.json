@@ -1,0 +1,67 @@
+{
+  "task_id": "live-threshold-tuning-and-recovery-panel-2026-04-21",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.backend.live_threshold_tuning",
+      "interface.backend.aggregate_brain_state",
+      "interface.frontend.withheld_recovery_panel",
+      "interface.frontend.truthful_state_gating",
+      "interface.frontend.live_visuals"
+    ],
+    "files": [
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/backend/tests/test_app.py",
+      "apps/frontend/app.js",
+      "apps/frontend/index.html",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": ".venv/bin/python -m pytest apps/backend/tests/test_app.py -q",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.live_threshold_tuning",
+        "interface.backend.aggregate_brain_state"
+      ]
+    },
+    {
+      "cmd": "node --check apps/frontend/app.js && python3 -m py_compile apps/backend/muse_lsl_bridge.py apps/backend/tests/test_app.py",
+      "ok": true,
+      "interfaces": [
+        "interface.frontend.withheld_recovery_panel",
+        "interface.frontend.truthful_state_gating",
+        "interface.frontend.live_visuals"
+      ]
+    },
+    {
+      "cmd": ".venv/bin/python /tmp/muse_live_review_v2.py",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.live_threshold_tuning",
+        "interface.backend.aggregate_brain_state",
+        "interface.frontend.withheld_recovery_panel"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "interface.backend.live_threshold_tuning",
+    "interface.backend.aggregate_brain_state",
+    "interface.frontend.withheld_recovery_panel",
+    "interface.frontend.truthful_state_gating",
+    "interface.frontend.live_visuals"
+  ],
+  "tested_interfaces": [
+    "interface.backend.live_threshold_tuning",
+    "interface.backend.aggregate_brain_state",
+    "interface.frontend.withheld_recovery_panel",
+    "interface.frontend.truthful_state_gating",
+    "interface.frontend.live_visuals"
+  ],
+  "elapsed_s": 0,
+  "tool_calls_count": 0,
+  "notes": "Added a withheld-recovery UI panel, tuned live line-noise and contact admission thresholds, and verified against a 2-minute live Muse session. The tuned backend now transitions between withheld, frontal-only, and occasional combined mode instead of staying permanently withheld."
+}
