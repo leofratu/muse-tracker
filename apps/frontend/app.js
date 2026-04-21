@@ -16,6 +16,7 @@ const elements = {
   modelChip: document.getElementById("model-chip"),
   versionChip: document.getElementById("version-chip"),
   sampleRate: document.getElementById("sample-rate"),
+  calloutNote: document.getElementById("callout-note"),
   artifactScore: document.getElementById("artifact-score"),
   agreementScore: document.getElementById("agreement-score"),
   usableChannels: document.getElementById("usable-channels"),
@@ -46,6 +47,11 @@ const elements = {
   calibrationScore: document.getElementById("calibration-score"),
   calibrationNote: document.getElementById("calibration-note"),
   calibrationGuide: document.getElementById("calibration-guide"),
+  withheldNote: document.getElementById("withheld-note"),
+  withheldGrid: document.getElementById("withheld-grid"),
+  baselineScore: document.getElementById("baseline-score"),
+  baselineNote: document.getElementById("baseline-note"),
+  baselineGrid: document.getElementById("baseline-grid"),
   versionName: document.getElementById("version-name"),
   versionConfidence: document.getElementById("version-confidence"),
   versionIdentity: document.getElementById("version-identity"),
@@ -61,14 +67,25 @@ const state = {
   snapshot: null,
   source: null,
   bandTrendHistory: [],
+  pollHandle: null,
 };
 
 function start() {
+  pollOnce().catch(() => {});
   connectStream();
+  ensurePollingFallback();
   window.addEventListener("resize", drawAllCharts);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      pollOnce().catch(() => {});
+    }
+  });
 }
 
 function connectStream() {
+  if (state.source) {
+    state.source.close();
+  }
   const stream = new EventSource("/api/stream");
   state.source = stream;
   stream.addEventListener("snapshot", (event) => {
@@ -77,9 +94,18 @@ function connectStream() {
   });
   stream.onerror = () => {
     stream.close();
-    pollOnce();
+    pollOnce().catch(() => {});
     setTimeout(connectStream, 1400);
   };
+}
+
+function ensurePollingFallback() {
+  if (state.pollHandle) {
+    window.clearInterval(state.pollHandle);
+  }
+  state.pollHandle = window.setInterval(() => {
+    pollOnce().catch(() => {});
+  }, 1500);
 }
 
 async function pollOnce() {
@@ -101,9 +127,11 @@ function render(snapshot) {
   renderSupport(snapshot);
   renderFit(snapshot);
   renderBrainState(snapshot);
+  renderWithheldRecovery(snapshot);
   renderOfficialFit(snapshot);
   renderMotion(snapshot);
   renderCalibration(snapshot);
+  renderBaseline(snapshot);
   renderVersion(snapshot);
   renderBands(snapshot);
   renderMoments(snapshot);
@@ -130,6 +158,7 @@ function renderStatus(snapshot) {
   elements.modelChip.textContent = `Profile: ${snapshot.device.label}`;
   elements.versionChip.textContent = `Version: ${versionName}`;
   elements.sampleRate.textContent = snapshot.eeg.sampleRateHz;
+  elements.calloutNote.textContent = buildCalloutNote(snapshot);
 }
 
 function renderQualitySurface(snapshot) {
@@ -225,6 +254,21 @@ function renderBattery(snapshot) {
     : "Telemetry is not live yet, so battery state stays blank until the headset exposes it.";
 }
 
+function buildCalloutNote(snapshot) {
+  const sampleCount = snapshot.eeg.sampleCount || 0;
+  const motionLive = Boolean(snapshot.motion?.available);
+  const telemetryLive = Boolean(snapshot.telemetry?.available);
+  if (!snapshot.connection.connected || sampleCount === 0) {
+    return "The dashboard stays empty until a live MuseLSL stream comes online.";
+  }
+
+  const telemetryCopy = telemetryLive
+    ? "battery telemetry is live"
+    : "battery telemetry is still waiting";
+  const motionCopy = motionLive ? "motion streams are live" : "motion streams are still waiting";
+  return `${sampleCount} live EEG samples are in the rolling window; ${motionCopy} and ${telemetryCopy}.`;
+}
+
 function renderSources(snapshot) {
   const streams = snapshot.connection.streams || [];
   elements.sourcesNote.textContent = snapshot.connection.connected
@@ -252,8 +296,8 @@ function renderTelemetry(snapshot) {
   const isActive = Boolean(telemetry.available);
   const history = isActive ? telemetry.history || [] : [];
   elements.telemetryNote.textContent = telemetry.available
-    ? "Live Muse telemetry is active. Temperature, fuel gauge, voltage, and battery are now exposed separately."
-    : "Waiting for telemetry details.";
+    ? "Live Muse telemetry is active. Temperature, fuel gauge, voltage, and battery are exposed at the headset level only, not per sensor."
+    : "Waiting for telemetry details. This stream does not expose per-sensor voltage or wattage.";
 
   const metrics = [
     {
@@ -325,11 +369,13 @@ function renderSupport(snapshot) {
 
 function renderFit(snapshot) {
   elements.fitScore.textContent = `${snapshot.sensorFit.overallScore.toFixed(0)}%`;
-  elements.fitNote.textContent = `${toTitleCase(snapshot.sensorFit.overallLabel)} fit. ${snapshot.sensorFit.method} Each sensor card now includes a live contact trend graph.`;
+  const asymmetry = snapshot.sensorFit.asymmetry || {};
+  elements.fitNote.textContent = `${toTitleCase(snapshot.sensorFit.overallLabel)} estimated contact. ${snapshot.sensorFit.method} ${asymmetry.summary || ""} ${snapshot.sensorFit.telemetryScope || ""}`.trim();
   elements.fitChannelGrid.innerHTML = snapshot.sensorFit.channels
     .map((channel) => {
       const historyGraph = renderFitHistoryGraph(channel.history || []);
       const trendCopy = describeFitTrend(channel.history || []);
+      const notes = (channel.notes || []).slice(0, 2).map((note) => `<p class="fit-copy">${note}</p>`).join("");
       return `
         <article class="fit-card">
           <span class="fit-pill">${toTitleCase(channel.label)}</span>
@@ -339,7 +385,8 @@ function renderFit(snapshot) {
             ${historyGraph}
           </div>
           <p class="fit-copy">Trend: ${trendCopy}.</p>
-          <p class="fit-copy">${toTitleCase(channel.contactState)} - spread ${formatValue(channel.signalSpreadUv)} uV, peak-to-peak ${formatValue(channel.peakToPeakUv)} uV.</p>
+          <p class="fit-copy">${toTitleCase(channel.contactState)} - spread ${formatValue(channel.signalSpreadUv)} uV, peak-to-peak ${formatValue(channel.peakToPeakUv)} uV, rail ${percentFromRatio(channel.railRatio)}%.</p>
+          ${notes}
         </article>
       `;
     })
@@ -363,13 +410,32 @@ function renderBrainState(snapshot) {
   const deltaDominance = brainState.deltaDominance || snapshot.eeg.metrics.deltaDominance || {};
   const quality = brainState.quality || snapshot.eeg.metrics.quality || {};
   const plausibility = brainState.plausibilityScore ?? 0;
+  const withheld = Boolean(brainState.withheld);
+  const sourceMode = brainState.sourceMode || "withheld";
+  const reasons = brainState.withheldReasons || [];
+  const sourceSensors = brainState.sourceSensors || [];
 
   elements.plausibilityScore.textContent = `${plausibility.toFixed(0)}%`;
-  elements.overallBrainNote.textContent = `${toTitleCase(brainState.plausibilityLabel || "waiting")} plausibility. ${deltaDominance.warning || "Waiting for enough signal to judge the combined band balance."} ${quality.summary || ""}`.trim();
+  elements.overallBrainNote.textContent = withheld
+    ? `Withheld. ${brainState.summary || "Overall brain-state output is withheld."} ${(reasons[0] || quality.summary || "").trim()}`
+    : `${toTitleCase(brainState.plausibilityLabel || "waiting")} plausibility. ${brainState.summary || deltaDominance.warning || "Waiting for enough signal to judge the combined band balance."} ${quality.summary || ""}`.trim();
+  if (withheld) {
+    elements.overallBandGrid.innerHTML = `
+      <article class="quality-card tone-poor">
+        <div class="quality-card-top">
+          <span class="support-pill">Withheld</span>
+          <strong>${toTitleCase(sourceMode)}</strong>
+        </div>
+        <p class="fit-copy">${brainState.summary || "Overall brain-state output is withheld."}</p>
+        ${reasons.map((reason) => `<p class="fit-copy">${reason}</p>`).join("")}
+      </article>
+    `;
+    return;
+  }
   elements.overallBandGrid.innerHTML = BAND_ORDER.map((band) => {
     const value = overallBands[band.key] || 0;
     const accent = band.key === dominantBand;
-    const dominanceCopy = accent ? `<p class="fit-copy">Dominant band across all sensors right now.</p>` : "";
+    const dominanceCopy = accent ? `<p class="fit-copy">Dominant band across the ${sourceMode === "frontal-only" ? "frontal-only fallback" : "admitted sensor set"} right now.</p>` : "";
     return `
       <article class="band-card" style="${accent ? "border-color: rgba(16, 118, 110, 0.24); box-shadow: 0 14px 28px rgba(22, 158, 146, 0.10);" : ""}">
         <h3>${band.label}</h3>
@@ -379,6 +445,7 @@ function renderBrainState(snapshot) {
           <span class="band-value">${value.toFixed(0)}%</span>
         </div>
         <p class="fit-copy">Range ${band.range[0]}-${band.range[1]} Hz.</p>
+        <p class="fit-copy">Source: ${sourceMode === "frontal-only" ? `Frontal fallback (${sourceSensors.join(", ")})` : `Combined admitted sensors (${sourceSensors.join(", ")})`}.</p>
         ${dominanceCopy}
       </article>
     `;
@@ -388,7 +455,8 @@ function renderBrainState(snapshot) {
 function renderOfficialFit(snapshot) {
   const officialView = snapshot.sensorFit.officialView || { sensors: [] };
   const score = snapshot.sensorFit.overallScore ?? 0;
-  elements.officialFitNote.textContent = `${toTitleCase(snapshot.sensorFit.overallLabel)} fit across the headset. Estimated from live EEG stability to mimic the official calibration view.`;
+  const asymmetry = snapshot.sensorFit.asymmetry || {};
+  elements.officialFitNote.textContent = `${toTitleCase(snapshot.sensorFit.overallLabel)} estimated contact across the headset. ${asymmetry.summary || "Estimated from live EEG stability to mimic the official calibration view."}`;
 
   const positionMap = {
     TP9: "left: 8px; bottom: 10px;",
@@ -417,10 +485,88 @@ function renderOfficialFit(snapshot) {
       <div class="official-fit-arch"></div>
       ${sensorsMarkup}
       <div class="fit-copy" style="position:absolute; left:50%; bottom:0; transform:translateX(-50%); text-align:center; width:100%;">
-        Overall fit ${score.toFixed(0)}%.
+        Overall estimated contact ${score.toFixed(0)}%.
       </div>
     </div>
   `;
+}
+
+function renderWithheldRecovery(snapshot) {
+  const brainState = snapshot.brainState || {};
+  const quality = snapshot.eeg.metrics.quality || {};
+  const asymmetry = snapshot.sensorFit.asymmetry || {};
+  const withheld = Boolean(brainState.withheld);
+  const reasons = brainState.withheldReasons || [];
+  const sourceMode = brainState.sourceMode || "withheld";
+
+  elements.withheldNote.textContent = withheld
+    ? `${brainState.summary || "Overall brain-state output is withheld."} ${reasons[0] || ""}`.trim()
+    : sourceMode === "frontal-only"
+      ? `Frontal-only fallback is active using ${brainState.sourceSensors.join(", ")} while the rear sensors recover.`
+      : "Combined mode is active because enough clean sensors are admitted.";
+
+  const cards = [
+    {
+      label: "Aggregate mode",
+      value: withheld ? 0 : sourceMode === "frontal-only" ? 58 : 92,
+      suffix: sourceMode === "frontal-only" ? "Frontal-only" : toTitleCase(sourceMode),
+      copy: brainState.summary || "Waiting for aggregate state details.",
+    },
+    {
+      label: "Clean coverage",
+      value: quality.cleanWindowCoverage || 0,
+      suffix: `${Math.round(quality.admittedChannelCount || 0)}/${snapshot.eeg.channels.length}`,
+      copy: `Need at least ${quality.minimumCombinedChannels || 3} clean sensors for a combined view.`,
+    },
+    {
+      label: "Rear asymmetry",
+      value: Math.max(0, 100 - Math.abs(asymmetry.difference || 0)),
+      suffix: toTitleCase(asymmetry.status || "waiting"),
+      copy: asymmetry.summary || "Waiting for front vs rear comparison.",
+    },
+    {
+      label: "Recovery now",
+      value: quality.contactScore || 0,
+      suffix: `${Math.round(quality.contactScore || 0)}% contact`,
+      copy: buildRecoveryCopy(snapshot),
+    },
+  ];
+
+  elements.withheldGrid.innerHTML = cards
+    .map((card) => {
+      const normalizedValue = Math.max(0, Math.min(100, card.value));
+      return `
+        <article class="quality-card ${qualityToneClass(normalizedValue)}">
+          <div class="quality-card-top">
+            <span class="support-pill">${card.label}</span>
+            <strong>${card.suffix}</strong>
+          </div>
+          <div class="quality-meter-shell">
+            <div class="quality-meter-fill" style="width:${normalizedValue.toFixed(1)}%"></div>
+          </div>
+          <p class="fit-copy">${card.copy}</p>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function buildRecoveryCopy(snapshot) {
+  const asymmetry = snapshot.sensorFit.asymmetry || {};
+  const channels = snapshot.sensorFit.channels || [];
+  const rearWeak = channels
+    .filter((channel) => ["TP9", "TP10"].includes(channel.channel) && channel.score < 35)
+    .map((channel) => channel.channel);
+  if (rearWeak.length) {
+    return `Focus on ${rearWeak.join(" and ")} first: reseat the rear pads, move hair away, and keep the band pressure even for 10-20 seconds.`;
+  }
+  if (asymmetry.status === "rear-weaker") {
+    return "The rear pair is still weaker than the frontal pair. Lift and reseat the back contacts, then hold still until the admitted-sensor count increases.";
+  }
+  if (snapshot.brainState.sourceMode === "frontal-only") {
+    return "Frontal fallback is active. Keep still and improve TP9/TP10 contact if you want the full combined brain-state view back.";
+  }
+  return "The aggregate view is stable right now. If it drops back to withheld, improve the weakest contact first and wait for clean coverage to recover.";
 }
 
 function renderMotion(snapshot) {
@@ -451,9 +597,79 @@ function renderCalibration(snapshot) {
   const calibration = snapshot.calibration;
   const quality = snapshot.eeg.metrics.quality || {};
   elements.calibrationScore.textContent = `${calibration.confidenceScore.toFixed(0)}%`;
-  elements.calibrationNote.textContent = `${toTitleCase(calibration.confidenceLabel)} calibration confidence based on fit, motion, battery, ${snapshot.eeg.metrics.continuity.label} signal continuity, and ${Math.round(quality.lineNoiseScore || 0)}% line-noise rejection.`;
+  elements.calibrationNote.textContent = `${toTitleCase(calibration.confidenceLabel)} calibration confidence based on estimated contact, motion, battery, ${snapshot.eeg.metrics.continuity.label} signal continuity, and ${Math.round(quality.lineNoiseScore || 0)}% line-noise rejection.`;
   elements.calibrationGuide.innerHTML = calibration.preparationGuide
     .map((item) => `<li>${item}</li>`)
+    .join("");
+}
+
+function renderBaseline(snapshot) {
+  const baseline = snapshot.baseline || {};
+  const current = baseline.current || {};
+  const normal = baseline.normal || {};
+  const focused = baseline.focused || {};
+  const vsNormal = baseline.vsNormal || {};
+  const vsFocused = baseline.vsFocused || {};
+
+  elements.baselineScore.textContent = `${Math.round(baseline.confidenceScore || 0)}%`;
+  elements.baselineNote.textContent = baseline.note
+    || "Waiting for enough steady EEG to learn your rolling normal and focused baselines.";
+
+  const cards = [
+    {
+      label: "Baseline lock",
+      value: baseline.confidenceScore || 0,
+      suffix: `${Math.round(baseline.durationSeconds || 0)}s`,
+      copy: `${baseline.windowCount || 0} accepted clean windows captured. Confidence is ${toTitleCase(baseline.confidenceLabel || "waiting")}.`,
+    },
+    {
+      label: "Current state",
+      value: current.focusIndex || 0,
+      suffix: `${Math.round(current.focusIndex || 0)} focus`,
+      copy: `Current dominant band is ${toTitleCase(current.dominantBand || "waiting")} with accuracy ${Math.round(current.accuracyScore || 0)}%.`,
+    },
+    {
+      label: "Normal baseline",
+      value: normal.focusIndex || 0,
+      suffix: `${Math.round(normal.focusIndex || 0)} focus`,
+      copy: `Normal baseline centers on ${toTitleCase(normal.dominantBand || "waiting")} with estimated contact ${Math.round(normal.fitScore || 0)}% and motion ${Math.round(normal.motionScore || 0)}%.`,
+    },
+    {
+      label: "Focused baseline",
+      value: focused.focusIndex || 0,
+      suffix: `${Math.round(focused.focusIndex || 0)} focus`,
+      copy: `Focused baseline centers on ${toTitleCase(focused.dominantBand || "waiting")} with quality anchor ${Math.round(focused.qualityAnchor || 0)}%.`,
+    },
+    {
+      label: "Vs normal",
+      value: 50 + (vsNormal.focusShift || 0),
+      suffix: toTitleCase(vsNormal.status || "waiting"),
+      copy: vsNormal.summary || "Waiting for a normal baseline to compare against.",
+    },
+    {
+      label: "Vs focused",
+      value: 50 + (vsFocused.focusShift || 0),
+      suffix: toTitleCase(vsFocused.status || "waiting"),
+      copy: vsFocused.summary || "Waiting for a focused baseline to compare against.",
+    },
+  ];
+
+  elements.baselineGrid.innerHTML = cards
+    .map((card) => {
+      const normalizedValue = Math.max(0, Math.min(100, card.value));
+      return `
+        <article class="quality-card ${qualityToneClass(normalizedValue)}">
+          <div class="quality-card-top">
+            <span class="support-pill">${card.label}</span>
+            <strong>${card.suffix}</strong>
+          </div>
+          <div class="quality-meter-shell">
+            <div class="quality-meter-fill" style="width:${normalizedValue.toFixed(1)}%"></div>
+          </div>
+          <p class="fit-copy">${card.copy}</p>
+        </article>
+      `;
+    })
     .join("");
 }
 
@@ -478,10 +694,11 @@ function renderBands(snapshot) {
         <article class="band-card ${qualityToneClass(qualityWeight)}">
           <div class="quality-card-top">
             <h3>${channel.channel}</h3>
-            <span class="support-pill">Trust ${Math.round(qualityWeight)}%</span>
+            <span class="support-pill">${channel.admitted ? `Accepted ${Math.round(qualityWeight)}%` : "Rejected"}</span>
           </div>
           ${rows}
-          <p class="fit-copy">Drift ${percentFromRatio(channel.driftRatio)}%, spikes ${percentFromRatio(channel.spikeRatio)}%, flatline ${percentFromRatio(channel.flatRatio)}%.</p>
+          <p class="fit-copy">Drift ${percentFromRatio(channel.driftRatio)}%, spikes ${percentFromRatio(channel.spikeRatio)}%, flatline ${percentFromRatio(channel.flatRatio)}%, clip ${percentFromRatio(channel.clipRatio)}%.</p>
+          ${(channel.rejectReasons || []).slice(0, 2).map((reason) => `<p class="fit-copy">${reason}</p>`).join("")}
         </article>
       `;
     })
