@@ -1,7 +1,13 @@
 {
-  "generated_at": "2026-04-20T23:28:31+00:00",
+  "generated_at": "2026-04-21T11:18:13+00:00",
   "files": [
     ".gitignore",
+    ".playwright-cli/console-2026-04-21T07-50-35-924Z.log",
+    ".playwright-cli/console-2026-04-21T07-51-58-207Z.log",
+    ".playwright-cli/console-2026-04-21T11-16-58-047Z.log",
+    ".playwright-cli/page-2026-04-21T07-50-36-097Z.yml",
+    ".playwright-cli/page-2026-04-21T07-51-58-327Z.yml",
+    ".playwright-cli/page-2026-04-21T11-16-58-169Z.yml",
     "README.md",
     "apps/__init__.py",
     "apps/backend/__init__.py",
@@ -18,5 +24,13 @@
     "scripts/start_muse_stream.py",
     "scripts/tools/rpg_builder.py",
     "scripts/validate_rpg.py"
+  ],
+  "last_agent_task": "live-threshold-tuning-and-withheld-recovery",
+  "last_agent_focus": [
+    "apps/backend/muse_lsl_bridge.py",
+    "apps/backend/tests/test_app.py",
+    "apps/frontend/app.js",
+    "apps/frontend/index.html",
+    "repo_plan/rpg.json"
   ]
 }
