@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "task": "Build a clean MuseLSL GUI with Muse 1 and Muse 2 support, battery tracking, and live brain-wave visualization.",
+  "task": "Massively increase live Muse accuracy by rejecting clipped windows, making fit/contact truthful, stabilizing baseline comparisons, and gating misleading dashboard output.",
   "nodes": [
     {
       "id": "interface.backend.lsl_bridge",
@@ -105,14 +105,14 @@
       "type": "interface",
       "path": "apps/frontend/app.js",
       "summary": "Render overall brain-wave state, delta-dominance checks, and a live per-sensor fit panel inspired by the official calibration view.",
-      "status": "tested"
+      "status": "planned"
     },
     {
       "id": "interface.frontend.signal_quality_surface",
       "type": "interface",
       "path": "apps/frontend/app.js",
       "summary": "Surface trust, artifact, agreement, and usable-sensor quality metrics across the hero and accuracy panels.",
-      "status": "tested"
+      "status": "planned"
     },
     {
       "id": "interface.frontend.reliability_surface",
@@ -133,7 +133,7 @@
       "type": "interface",
       "path": "apps/backend/tests/test_app.py",
       "summary": "Verify the bridge snapshot shape and HTTP API responses.",
-      "status": "tested"
+      "status": "planned"
     },
     {
       "id": "file.apps_backend_app",
@@ -164,6 +164,48 @@
       "id": "file.tests_backend_api",
       "type": "file",
       "path": "apps/backend/tests/test_app.py"
+    },
+    {
+      "id": "interface.backend.signal_admission_gating",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Reject clipped, railed, drift-heavy, and weak-contact channels/windows before they contribute to overall brain-state estimates.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.truthful_fit_contact",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Separate estimated EEG-derived contact confidence from real telemetry so rear-sensor fit is presented honestly and asymmetry is diagnosed instead of guessed.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.baseline_state_model",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Build calm, normal, and focused baselines only from clean windows and compare current state against those baselines over longer horizons.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.truthful_state_gating",
+      "type": "interface",
+      "path": "apps/frontend/app.js",
+      "summary": "Hide or downgrade overall brain-state cards when too few sensors are trustworthy and explain exactly why the reading is withheld.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.withheld_recovery_panel",
+      "type": "interface",
+      "path": "apps/frontend/app.js",
+      "summary": "Render a dedicated withheld-state panel that explains why the aggregate brain state is hidden and how to recover clean sensor coverage live.",
+      "status": "tested"
+    },
+    {
+      "id": "interface.backend.live_threshold_tuning",
+      "type": "interface",
+      "path": "apps/backend/muse_lsl_bridge.py",
+      "summary": "Tune live channel admission thresholds against real Muse data so frontal fallback and combined mode engage at the right time without reintroducing false delta.",
+      "status": "tested"
     }
   ],
   "edges": [
@@ -256,6 +298,66 @@
       "from": "interface.backend.http_server",
       "to": "interface.tests.backend_api",
       "type": "dependency"
+    },
+    {
+      "from": "interface.backend.lsl_bridge",
+      "to": "interface.backend.signal_admission_gating",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.signal_intelligence",
+      "to": "interface.backend.truthful_fit_contact",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.signal_admission_gating",
+      "to": "interface.backend.signal_preprocessing_accuracy",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.truthful_fit_contact",
+      "to": "interface.backend.aggregate_brain_state",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.signal_preprocessing_accuracy",
+      "to": "interface.backend.baseline_state_model",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.baseline_state_model",
+      "to": "interface.backend.aggregate_brain_state",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.aggregate_brain_state",
+      "to": "interface.frontend.truthful_state_gating",
+      "type": "data_flow"
+    },
+    {
+      "from": "interface.backend.truthful_fit_contact",
+      "to": "interface.frontend.truthful_state_gating",
+      "type": "data_flow"
+    },
+    {
+      "from": "interface.frontend.truthful_state_gating",
+      "to": "interface.frontend.live_visuals",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.live_threshold_tuning",
+      "to": "interface.backend.aggregate_brain_state",
+      "type": "dependency"
+    },
+    {
+      "from": "interface.backend.aggregate_brain_state",
+      "to": "interface.frontend.withheld_recovery_panel",
+      "type": "data_flow"
+    },
+    {
+      "from": "interface.frontend.withheld_recovery_panel",
+      "to": "interface.frontend.live_visuals",
+      "type": "dependency"
     }
   ],
   "work_plan": [
@@ -272,11 +374,11 @@
       "status": "tested"
     },
     {
-      "id": "interface.backend.sensor_fit_history",
+      "id": "interface.backend.signal_admission_gating",
       "status": "tested"
     },
     {
-      "id": "interface.backend.telemetry_surface",
+      "id": "interface.backend.truthful_fit_contact",
       "status": "tested"
     },
     {
@@ -284,11 +386,7 @@
       "status": "tested"
     },
     {
-      "id": "interface.backend.motion_and_calibration",
-      "status": "tested"
-    },
-    {
-      "id": "interface.backend.aggregate_brain_state",
+      "id": "interface.backend.baseline_state_model",
       "status": "tested"
     },
     {
@@ -300,19 +398,7 @@
       "status": "tested"
     },
     {
-      "id": "interface.frontend.live_visuals",
-      "status": "tested"
-    },
-    {
       "id": "interface.frontend.fit_and_trends",
-      "status": "tested"
-    },
-    {
-      "id": "interface.frontend.sensor_fit_graphs",
-      "status": "tested"
-    },
-    {
-      "id": "interface.frontend.motion_guidance",
       "status": "tested"
     },
     {
@@ -320,49 +406,42 @@
       "status": "tested"
     },
     {
-      "id": "interface.frontend.signal_quality_surface",
+      "id": "interface.backend.live_threshold_tuning",
       "status": "tested"
     },
     {
-      "id": "interface.frontend.reliability_surface",
+      "id": "interface.backend.aggregate_brain_state",
       "status": "tested"
     },
     {
-      "id": "interface.frontend.source_inventory",
+      "id": "interface.frontend.withheld_recovery_panel",
       "status": "tested"
     },
     {
-      "id": "interface.tests.backend_api",
+      "id": "interface.frontend.truthful_state_gating",
+      "status": "tested"
+    },
+    {
+      "id": "interface.frontend.live_visuals",
       "status": "tested"
     }
   ],
   "localization": {
-    "nodes": [
-      "interface.backend.lsl_bridge",
-      "interface.backend.http_server",
-      "interface.backend.signal_intelligence",
-      "interface.backend.sensor_fit_history",
-      "interface.backend.telemetry_surface",
-      "interface.backend.signal_preprocessing_accuracy",
-      "interface.backend.motion_and_calibration",
+    "interfaces": [
       "interface.backend.aggregate_brain_state",
-      "interface.frontend.dashboard_shell",
-      "interface.frontend.live_visuals",
-      "interface.frontend.fit_and_trends",
-      "interface.frontend.sensor_fit_graphs",
-      "interface.frontend.motion_guidance",
+      "interface.backend.signal_intelligence",
+      "interface.backend.signal_preprocessing_accuracy",
       "interface.frontend.aggregate_fit_view",
+      "interface.frontend.live_visuals",
       "interface.frontend.signal_quality_surface",
-      "interface.frontend.source_inventory",
       "interface.tests.backend_api"
     ],
     "files": [
       "apps/backend/muse_lsl_bridge.py",
-      "apps/backend/app.py",
-      "apps/frontend/index.html",
+      "apps/backend/tests/test_app.py",
       "apps/frontend/app.js",
-      "apps/frontend/styles.css",
-      "apps/backend/tests/test_app.py"
-    ]
+      "apps/frontend/index.html"
+    ],
+    "reasoning": "False awake delta dominance is driven mainly by backend band estimation and quality weighting, with frontend surfaces needing to reflect the more stable long-window interpretation."
   }
 }
