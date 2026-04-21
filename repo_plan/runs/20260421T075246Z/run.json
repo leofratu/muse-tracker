@@ -1,0 +1,77 @@
+{
+  "task_id": "frontend-live-refresh-hardening",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.frontend.dashboard_shell",
+      "interface.frontend.live_visuals",
+      "interface.frontend.fit_and_trends",
+      "interface.frontend.motion_guidance",
+      "interface.frontend.source_inventory"
+    ],
+    "files": [
+      "apps/frontend/index.html",
+      "apps/frontend/app.js"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "node --check apps/frontend/app.js",
+      "ok": true,
+      "interfaces": [
+        "interface.frontend.live_visuals",
+        "interface.frontend.fit_and_trends",
+        "interface.frontend.motion_guidance",
+        "interface.frontend.source_inventory"
+      ]
+    },
+    {
+      "cmd": "playwright open http://127.0.0.1:8010 --headed && snapshot",
+      "ok": true,
+      "interfaces": [
+        "interface.frontend.dashboard_shell",
+        "interface.frontend.live_visuals",
+        "interface.frontend.fit_and_trends",
+        "interface.frontend.motion_guidance",
+        "interface.frontend.source_inventory"
+      ]
+    },
+    {
+      "cmd": "python3 - <<'PY' ... urllib.request.urlopen('http://127.0.0.1:8010/api/status') ... PY",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.http_server",
+        "interface.frontend.live_visuals",
+        "interface.frontend.motion_guidance",
+        "interface.frontend.source_inventory"
+      ]
+    },
+    {
+      "cmd": "python3 scripts/validate_rpg.py",
+      "ok": true,
+      "interfaces": []
+    }
+  ],
+  "files_changed": [
+    "apps/frontend/index.html",
+    "apps/frontend/app.js",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ],
+  "implemented_interfaces": [
+    "interface.frontend.dashboard_shell",
+    "interface.frontend.live_visuals",
+    "interface.frontend.fit_and_trends",
+    "interface.frontend.motion_guidance",
+    "interface.frontend.source_inventory"
+  ],
+  "tested_interfaces": [
+    "interface.frontend.dashboard_shell",
+    "interface.frontend.live_visuals",
+    "interface.frontend.fit_and_trends",
+    "interface.frontend.motion_guidance",
+    "interface.frontend.source_inventory",
+    "interface.backend.http_server"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "task_id": "stabilize-live-muse-lsl-dashboard-ingestion",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.backend.lsl_bridge",
+      "interface.backend.telemetry_surface",
+      "interface.backend.motion_and_calibration",
+      "interface.tests.backend_api"
+    ],
+    "files": [
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/backend/tests/test_app.py"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": ".venv/bin/python -m pytest apps/backend/tests/test_app.py",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.lsl_bridge",
+        "interface.backend.telemetry_surface",
+        "interface.backend.motion_and_calibration",
+        "interface.tests.backend_api"
+      ]
+    },
+    {
+      "cmd": "python3 - <<'PY' ... urllib.request.urlopen('http://127.0.0.1:8010/api/status') ... PY",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.lsl_bridge",
+        "interface.backend.telemetry_surface",
+        "interface.backend.motion_and_calibration",
+        "interface.backend.http_server"
+      ]
+    },
+    {
+      "cmd": "python3 scripts/validate_rpg.py",
+      "ok": true,
+      "interfaces": []
+    }
+  ],
+  "files_changed": [
+    "apps/backend/muse_lsl_bridge.py",
+    "apps/backend/tests/test_app.py",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ],
+  "implemented_interfaces": [
+    "interface.backend.lsl_bridge",
+    "interface.backend.telemetry_surface",
+    "interface.backend.motion_and_calibration"
+  ],
+  "tested_interfaces": [
+    "interface.backend.lsl_bridge",
+    "interface.backend.telemetry_surface",
+    "interface.backend.motion_and_calibration",
+    "interface.tests.backend_api",
+    "interface.backend.http_server"
+  ]
+}
