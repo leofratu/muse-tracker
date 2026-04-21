@@ -1,0 +1,103 @@
+{
+  "task_id": "reconnect-muse-and-add-baseline-comparison",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "interface.backend.lsl_bridge",
+      "interface.backend.signal_intelligence",
+      "interface.backend.signal_preprocessing_accuracy",
+      "interface.backend.aggregate_brain_state",
+      "interface.backend.motion_and_calibration",
+      "interface.frontend.fit_and_trends",
+      "interface.frontend.aggregate_fit_view",
+      "interface.frontend.signal_quality_surface",
+      "interface.frontend.live_visuals",
+      "interface.tests.backend_api"
+    ],
+    "files": [
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/frontend/app.js",
+      "apps/frontend/index.html",
+      "apps/backend/tests/test_app.py"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": ".venv/bin/python -m pytest apps/backend/tests/test_app.py",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.lsl_bridge",
+        "interface.backend.signal_intelligence",
+        "interface.backend.signal_preprocessing_accuracy",
+        "interface.backend.aggregate_brain_state",
+        "interface.backend.motion_and_calibration",
+        "interface.tests.backend_api"
+      ]
+    },
+    {
+      "cmd": "node --check apps/frontend/app.js",
+      "ok": true,
+      "interfaces": [
+        "interface.frontend.fit_and_trends",
+        "interface.frontend.aggregate_fit_view",
+        "interface.frontend.signal_quality_surface",
+        "interface.frontend.live_visuals"
+      ]
+    },
+    {
+      "cmd": "python3 scripts/validate_rpg.py",
+      "ok": true,
+      "interfaces": []
+    },
+    {
+      "cmd": "BLE prewarm + .venv/bin/muselsl stream --address 113E9B6A-C946-F8F5-364A-9C820C2B86C4 --acc --gyro -r 2 -l info",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.lsl_bridge",
+        "interface.backend.motion_and_calibration"
+      ]
+    },
+    {
+      "cmd": "python3 - <<PY ... urlopen(http://127.0.0.1:8000/api/status) ... PY",
+      "ok": true,
+      "interfaces": [
+        "interface.backend.http_server",
+        "interface.backend.aggregate_brain_state",
+        "interface.frontend.live_visuals"
+      ]
+    }
+  ],
+  "files_changed": [
+    "apps/backend/muse_lsl_bridge.py",
+    "apps/frontend/app.js",
+    "apps/frontend/index.html",
+    "apps/backend/tests/test_app.py",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ],
+  "implemented_interfaces": [
+    "interface.backend.lsl_bridge",
+    "interface.backend.signal_intelligence",
+    "interface.backend.signal_preprocessing_accuracy",
+    "interface.backend.aggregate_brain_state",
+    "interface.backend.motion_and_calibration",
+    "interface.frontend.fit_and_trends",
+    "interface.frontend.aggregate_fit_view",
+    "interface.frontend.signal_quality_surface",
+    "interface.frontend.live_visuals"
+  ],
+  "tested_interfaces": [
+    "interface.backend.lsl_bridge",
+    "interface.backend.signal_intelligence",
+    "interface.backend.signal_preprocessing_accuracy",
+    "interface.backend.aggregate_brain_state",
+    "interface.backend.motion_and_calibration",
+    "interface.frontend.fit_and_trends",
+    "interface.frontend.aggregate_fit_view",
+    "interface.frontend.signal_quality_surface",
+    "interface.frontend.live_visuals",
+    "interface.tests.backend_api",
+    "interface.backend.http_server"
+  ]
+}

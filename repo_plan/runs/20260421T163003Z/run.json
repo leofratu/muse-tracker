@@ -1,0 +1,30 @@
+{
+  "task_id": "live-muse-review-2026-04-21",
+  "mode": "baseline",
+  "rpg_used": false,
+  "localization": {
+    "nodes": ["live-lsl-eeg-stream", "sensor-fit-heuristic", "telemetry-extraction", "brain-state-quality"],
+    "files": [
+      "apps/backend/muse_lsl_bridge.py",
+      "apps/frontend/app.js",
+      "apps/frontend/index.html"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": ".venv/bin/python /tmp/muse_quick_review.py",
+      "ok": true,
+      "interfaces": ["live-lsl-eeg-stream"]
+    },
+    {
+      "cmd": "python3 - <<'PY' ... /api/status polling ... PY",
+      "ok": true,
+      "interfaces": ["brain-state-quality", "sensor-fit-heuristic", "telemetry-extraction"]
+    }
+  ],
+  "implemented_interfaces": [],
+  "tested_interfaces": [],
+  "elapsed_s": 32,
+  "tool_calls_count": 8,
+  "notes": "Monitoring/review only. No repository files edited in this run. Initial 120s summarizer crashed during final aggregation because numpy.trapz was unavailable; follow-up live capture and API polling succeeded."
+}
