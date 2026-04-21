@@ -42,7 +42,7 @@
               <strong id="usable-channels">0/4</strong>
             </article>
           </div>
-          <p class="callout-note">The dashboard stays empty until a live MuseLSL stream comes online.</p>
+          <p class="callout-note" id="callout-note">The dashboard stays empty until a live MuseLSL stream comes online.</p>
         </div>
       </section>
 
@@ -116,13 +116,13 @@
         <article class="panel fit-panel">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Sensor fit</p>
-              <h2>Skin contact estimate</h2>
+              <p class="eyebrow">Estimated contact</p>
+              <h2>EEG-derived skin contact estimate</h2>
             </div>
             <div class="fit-score" id="fit-score">0</div>
           </div>
           <p class="panel-note" id="fit-note">
-            Waiting for a signal window before estimating sensor contact.
+            Waiting for a signal window before estimating contact from EEG stability.
           </p>
           <div class="fit-channel-grid" id="fit-channel-grid"></div>
         </article>
@@ -159,7 +159,7 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Live sensor view</p>
-              <h2>Official-style contact layout</h2>
+              <h2>Estimated contact layout</h2>
             </div>
           </div>
           <p class="panel-note" id="official-fit-note">Waiting for live contact estimates.</p>
@@ -194,6 +194,35 @@
       </section>
 
       <section class="dashboard-grid fit-grid">
+        <article class="panel quality-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Recovery guide</p>
+              <h2>Why the brain state is withheld</h2>
+            </div>
+          </div>
+          <p class="panel-note" id="withheld-note">Waiting for enough signal to explain the aggregate state.</p>
+          <div class="quality-metric-grid" id="withheld-grid"></div>
+        </article>
+      </section>
+
+      <section class="dashboard-grid fit-grid">
+        <article class="panel quality-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Baseline compare</p>
+              <h2>Normal vs focused baseline</h2>
+            </div>
+            <div class="fit-score" id="baseline-score">0</div>
+          </div>
+          <p class="panel-note" id="baseline-note">
+            Waiting for enough steady EEG to learn your rolling normal and focused baselines.
+          </p>
+          <div class="quality-metric-grid" id="baseline-grid"></div>
+        </article>
+      </section>
+
+      <section class="dashboard-grid fit-grid">
         <article class="panel motion-panel">
           <div class="panel-heading">
             <div>
@@ -223,9 +252,9 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Timegraph</p>
-              <h2>Battery and fit over time</h2>
+              <h2>Battery and estimated contact over time</h2>
             </div>
-            <p class="panel-note">Tracks the battery feed alongside the rolling skin-contact estimate.</p>
+            <p class="panel-note">Tracks the battery feed alongside the rolling EEG-derived contact estimate.</p>
           </div>
           <canvas id="trend-canvas"></canvas>
         </article>
