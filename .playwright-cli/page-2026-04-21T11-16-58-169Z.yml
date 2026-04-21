@@ -1,0 +1,525 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - paragraph [ref=e5]: MuseLSL Studio
+      - heading "Battery-aware brain-wave monitoring for Muse 1 and Muse 2." [level=1] [ref=e6]
+      - paragraph [ref=e7]: Streaming live MuseLSL data from Muse.
+      - generic [ref=e8]:
+        - generic [ref=e9]: Live MuseLSL
+        - generic [ref=e10]: "Trust: Good trust"
+        - generic [ref=e11]: "Source: lsl"
+        - generic [ref=e12]: "Profile: Muse 2"
+        - generic [ref=e13]: "Version: Muse 2"
+    - generic [ref=e14]:
+      - paragraph [ref=e15]: Live sample rate
+      - generic [ref=e16]: 256 Hz
+      - generic [ref=e17]:
+        - article [ref=e18]:
+          - generic [ref=e19]: Artifacts
+          - strong [ref=e20]: 40%
+        - article [ref=e21]:
+          - generic [ref=e22]: Agreement
+          - strong [ref=e23]: 73%
+        - article [ref=e24]:
+          - generic [ref=e25]: Usable sensors
+          - strong [ref=e26]: 2/4
+      - paragraph [ref=e27]: 480 live EEG samples are in the rolling window; motion streams are live and battery telemetry is still waiting.
+  - generic [ref=e28]:
+    - article [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - paragraph [ref=e32]: Battery tracker
+          - heading "Keep an eye on headset endurance." [level=2] [ref=e33]
+        - generic [ref=e34]: "--"
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - paragraph [ref=e39]: Battery state
+          - paragraph [ref=e40]: Waiting
+        - generic [ref=e41]:
+          - paragraph [ref=e42]: Trend
+          - paragraph [ref=e43]: Waiting
+        - generic [ref=e44]:
+          - paragraph [ref=e45]: Telemetry
+          - paragraph [ref=e46]: Awaiting feed
+      - paragraph [ref=e47]: Telemetry is not live yet, so battery state stays blank until the headset exposes it.
+    - article [ref=e48]:
+      - generic [ref=e50]:
+        - paragraph [ref=e51]: Support map
+        - heading "Muse hardware coverage" [level=2] [ref=e52]
+      - generic [ref=e53]:
+        - article [ref=e54]:
+          - generic [ref=e55]: Supported
+          - heading "Muse 1" [level=3] [ref=e56]
+          - paragraph [ref=e57]: Classic four-channel Muse headset
+        - article [ref=e58]:
+          - generic [ref=e59]: Selected
+          - heading "Muse 2" [level=3] [ref=e60]
+          - paragraph [ref=e61]: Muse 2 with EEG, motion, and richer telemetry support
+  - generic [ref=e62]:
+    - article [ref=e63]:
+      - generic [ref=e65]:
+        - paragraph [ref=e66]: Data sources
+        - heading "Everything coming off the headset" [level=2] [ref=e67]
+      - paragraph [ref=e68]: Live source diagnostics show which Muse streams are actively feeding the dashboard.
+      - generic [ref=e69]:
+        - article [ref=e70]:
+          - generic [ref=e71]:
+            - generic [ref=e72]: Live
+            - strong [ref=e73]: EEG
+          - paragraph [ref=e74]: 4 channels at 256 Hz
+          - paragraph [ref=e75]: Primary brain-wave stream feeding the live viewer.
+        - article [ref=e76]:
+          - generic [ref=e77]:
+            - generic [ref=e78]: Waiting
+            - strong [ref=e79]: Telemetry
+          - paragraph [ref=e80]: Waiting for battery, temperature, and voltage metrics
+          - paragraph [ref=e81]: Fuel gauge, ADC voltage, and temperature from the Muse telemetry stream.
+        - article [ref=e82]:
+          - generic [ref=e83]:
+            - generic [ref=e84]: Live
+            - strong [ref=e85]: Accelerometer
+          - paragraph [ref=e86]: 3 axes at 17.1 Hz
+          - paragraph [ref=e87]: Raw X/Y/Z g-force data used for posture and motion stability.
+        - article [ref=e88]:
+          - generic [ref=e89]:
+            - generic [ref=e90]: Live
+            - strong [ref=e91]: Gyroscope
+          - paragraph [ref=e92]: 3 axes at 17.2 Hz
+          - paragraph [ref=e93]: Raw X/Y/Z angular velocity data used for stillness and motion checks.
+    - article [ref=e94]:
+      - generic [ref=e96]:
+        - paragraph [ref=e97]: Telemetry
+        - heading "Battery, voltage, and temperature" [level=2] [ref=e98]
+      - paragraph [ref=e99]: Waiting for telemetry details.
+      - generic [ref=e100]:
+        - article [ref=e101]:
+          - generic [ref=e102]:
+            - generic [ref=e103]: Battery
+            - strong [ref=e104]: "--%"
+          - generic [ref=e106]: Waiting for battery
+        - article [ref=e107]:
+          - generic [ref=e108]:
+            - generic [ref=e109]: Fuel gauge
+            - strong [ref=e110]: "--%"
+          - generic [ref=e112]: Waiting for fuel gauge
+        - article [ref=e113]:
+          - generic [ref=e114]:
+            - generic [ref=e115]: ADC volt
+            - strong [ref=e116]: "-- V"
+          - generic [ref=e118]: Waiting for adc volt
+        - article [ref=e119]:
+          - generic [ref=e120]:
+            - generic [ref=e121]: Temp
+            - strong [ref=e122]: "-- C"
+          - generic [ref=e124]: Waiting for temp
+  - generic [ref=e125]:
+    - article [ref=e126]:
+      - generic [ref=e127]:
+        - generic [ref=e128]:
+          - paragraph [ref=e129]: Sensor fit
+          - heading "Skin contact estimate" [level=2] [ref=e130]
+        - generic [ref=e131]: 27%
+      - paragraph [ref=e132]: Poor fit. Estimated from rolling EEG stability because this MuseLSL stream does not expose a dedicated fit metric. Each sensor card now includes a live contact trend graph.
+      - generic [ref=e133]:
+        - article [ref=e134]:
+          - generic [ref=e135]: Poor
+          - heading "TP9" [level=3] [ref=e136]
+          - img [ref=e140]
+          - paragraph [ref=e143]: "Trend: improving."
+          - paragraph [ref=e144]: Weak Contact - spread 739.3 uV, peak-to-peak 1999.5 uV.
+        - article [ref=e145]:
+          - generic [ref=e146]: Poor
+          - heading "AF7" [level=3] [ref=e147]
+          - img [ref=e151]
+          - paragraph [ref=e154]: "Trend: holding steady."
+          - paragraph [ref=e155]: Weak Contact - spread 176.2 uV, peak-to-peak 1158.7 uV.
+        - article [ref=e156]:
+          - generic [ref=e157]: Poor
+          - heading "AF8" [level=3] [ref=e158]
+          - img [ref=e162]
+          - paragraph [ref=e165]: "Trend: holding steady."
+          - paragraph [ref=e166]: Weak Contact - spread 172.1 uV, peak-to-peak 1187.5 uV.
+        - article [ref=e167]:
+          - generic [ref=e168]: Poor
+          - heading "TP10" [level=3] [ref=e169]
+          - img [ref=e173]
+          - paragraph [ref=e176]: "Trend: improving."
+          - paragraph [ref=e177]: Weak Contact - spread 716.4 uV, peak-to-peak 1999.0 uV.
+    - article [ref=e178]:
+      - generic [ref=e180]:
+        - paragraph [ref=e181]: Version insight
+        - heading "Detected headset version" [level=2] [ref=e182]
+      - generic [ref=e183]:
+        - paragraph [ref=e184]: Muse 2
+        - paragraph [ref=e185]: "Confidence: Medium"
+        - paragraph [ref=e186]: "Identity: Muse"
+      - list [ref=e187]:
+        - listitem [ref=e188]: No explicit hardware string was present in the LSL stream identity.
+        - listitem [ref=e189]: "LSL source id: Muse113E9B6A-C946-F8F5-364A-9C820C2B86C4"
+        - listitem [ref=e190]: EEG sample rate reported as 256 Hz.
+  - generic [ref=e191]:
+    - article [ref=e192]:
+      - generic [ref=e194]:
+        - paragraph [ref=e195]: Signal confidence
+        - heading "Frontend trust surface" [level=2] [ref=e196]
+      - paragraph [ref=e197]: 2 of 4 channels look usable. Accuracy 65% with artifact 40%, agreement 73%, line-noise rejection 61%, and contact confidence 27%. Artifacts are still elevated after preprocessing.
+      - generic [ref=e198]:
+        - article [ref=e199]:
+          - generic [ref=e200]:
+            - generic [ref=e201]: Accuracy stack
+            - strong [ref=e202]: 65%
+          - paragraph [ref=e205]: Composite trust score from contact, preprocessing, split-window stability, motion, and timing.
+        - article [ref=e206]:
+          - generic [ref=e207]:
+            - generic [ref=e208]: Artifact control
+            - strong [ref=e209]: 40%
+          - paragraph [ref=e212]: Higher means the frontend is seeing fewer spikes, flats, and unstable windows.
+        - article [ref=e213]:
+          - generic [ref=e214]:
+            - generic [ref=e215]: Channel agreement
+            - strong [ref=e216]: 73%
+          - paragraph [ref=e219]: Higher means the sensors tell a more coherent story instead of fighting each other.
+        - article [ref=e220]:
+          - generic [ref=e221]:
+            - generic [ref=e222]: Drift suppression
+            - strong [ref=e223]: 96%
+          - paragraph [ref=e226]: Shows how much slow baseline drift has been pushed out before the band estimate.
+        - article [ref=e227]:
+          - generic [ref=e228]:
+            - generic [ref=e229]: Line-noise rejection
+            - strong [ref=e230]: 61%
+          - paragraph [ref=e233]: Higher means less mains contamination from chargers, LEDs, and nearby power supplies.
+        - article [ref=e234]:
+          - generic [ref=e235]:
+            - generic [ref=e236]: Contact confidence
+            - strong [ref=e237]: 27%
+          - paragraph [ref=e240]: Summarizes whether the electrodes look stable enough to trust the shared band mix.
+        - article [ref=e241]:
+          - generic [ref=e242]:
+            - generic [ref=e243]: Split stability
+            - strong [ref=e244]: 27%
+          - paragraph [ref=e247]: Compares the first and second halves of the EEG window so short-lived drift shows up faster.
+        - article [ref=e248]:
+          - generic [ref=e249]:
+            - generic [ref=e250]: Motion stability
+            - strong [ref=e251]: 95%
+          - paragraph [ref=e254]: Uses accelerometer and gyroscope stillness to discount windows recorded during movement.
+        - article [ref=e255]:
+          - generic [ref=e256]:
+            - generic [ref=e257]: Usable sensors
+            - strong [ref=e258]: 2/4
+          - paragraph [ref=e261]: 2 of 4 sensors currently look usable for the combined view.
+    - article [ref=e262]:
+      - generic [ref=e264]:
+        - paragraph [ref=e265]: Live sensor view
+        - heading "Official-style contact layout" [level=2] [ref=e266]
+      - paragraph [ref=e267]: Poor fit across the headset. Estimated from live EEG stability to mimic the official calibration view.
+      - generic "Live Muse sensor contact view" [ref=e269]:
+        - generic [ref=e272]:
+          - strong [ref=e273]: TP9
+          - text: 25% Weak Contact
+        - generic [ref=e275]:
+          - strong [ref=e276]: AF7
+          - text: 28% Weak Contact
+        - generic [ref=e278]:
+          - strong [ref=e279]: AF8
+          - text: 28% Weak Contact
+        - generic [ref=e281]:
+          - strong [ref=e282]: TP10
+          - text: 26% Weak Contact
+        - generic [ref=e283]: Overall fit 27%.
+  - generic [ref=e284]:
+    - article [ref=e285]:
+      - generic [ref=e286]:
+        - generic [ref=e287]:
+          - paragraph [ref=e288]: Overall brain state
+          - heading "Combined brain-wave view" [level=2] [ref=e289]
+        - generic [ref=e290]: 65%
+      - paragraph [ref=e291]: Good plausibility. Overall brain-wave balance looks more plausible across all sensors. 2 of 4 channels look usable. Accuracy 65% with artifact 40%, agreement 73%, line-noise rejection 61%, and contact confidence 27%.
+      - generic [ref=e292]:
+        - article [ref=e293]:
+          - heading "Delta" [level=3] [ref=e294]
+          - generic [ref=e295]:
+            - generic [ref=e296]: Mix
+            - generic [ref=e299]: 13%
+          - paragraph [ref=e300]: Range 1-4 Hz.
+        - article [ref=e301]:
+          - heading "Theta" [level=3] [ref=e302]
+          - generic [ref=e303]:
+            - generic [ref=e304]: Mix
+            - generic [ref=e307]: 18%
+          - paragraph [ref=e308]: Range 4-8 Hz.
+        - article [ref=e309]:
+          - heading "Alpha" [level=3] [ref=e310]
+          - generic [ref=e311]:
+            - generic [ref=e312]: Mix
+            - generic [ref=e315]: 13%
+          - paragraph [ref=e316]: Range 8-13 Hz.
+        - article [ref=e317]:
+          - heading "Beta" [level=3] [ref=e318]
+          - generic [ref=e319]:
+            - generic [ref=e320]: Mix
+            - generic [ref=e323]: 37%
+          - paragraph [ref=e324]: Range 13-30 Hz.
+          - paragraph [ref=e325]: Dominant band across all sensors right now.
+        - article [ref=e326]:
+          - heading "Gamma" [level=3] [ref=e327]
+          - generic [ref=e328]:
+            - generic [ref=e329]: Mix
+            - generic [ref=e332]: 19%
+          - paragraph [ref=e333]: Range 30-45 Hz.
+    - article [ref=e334]:
+      - generic [ref=e335]:
+        - generic [ref=e336]:
+          - paragraph [ref=e337]: Calibration coach
+          - heading "Accuracy guidance" [level=2] [ref=e338]
+        - generic [ref=e339]: 30%
+      - paragraph [ref=e340]: Poor calibration confidence based on fit, motion, battery, excellent signal continuity, and 61% line-noise rejection.
+      - list [ref=e341]:
+        - listitem [ref=e342]: Re-seat the headset so TP9 and TP10 sit flat against the skin and move hair away from the sensors.
+        - listitem [ref=e343]: Hold a neutral, comfortable head position during calibration for cleaner alpha and beta estimates.
+        - listitem [ref=e344]: Signal timing looks steady enough for baseline calibration.
+        - listitem [ref=e345]: Overall band balance does not look artificially delta-heavy right now.
+        - listitem [ref=e346]: 2 of 4 channels look usable. Accuracy 65% with artifact 40%, agreement 73%, line-noise rejection 61%, and contact confidence 27%.
+        - listitem [ref=e347]: The EEG window is shifting within a second or two; hold still and give the headset another calm baseline window.
+  - article [ref=e349]:
+    - generic [ref=e350]:
+      - generic [ref=e351]:
+        - paragraph [ref=e352]: Baseline compare
+        - heading "Normal vs focused baseline" [level=2] [ref=e353]
+      - generic [ref=e354]: 57%
+    - paragraph [ref=e355]: Collect about 20-30 seconds of steady data so the dashboard can learn your normal and focused baselines.
+    - generic [ref=e356]:
+      - article [ref=e357]:
+        - generic [ref=e358]:
+          - generic [ref=e359]: Baseline lock
+          - strong [ref=e360]: 72s
+        - paragraph [ref=e363]: 6 rolling windows captured. Confidence is Fair.
+      - article [ref=e364]:
+        - generic [ref=e365]:
+          - generic [ref=e366]: Current state
+          - strong [ref=e367]: 76 focus
+        - paragraph [ref=e370]: Current dominant band is Beta with accuracy 65%.
+      - article [ref=e371]:
+        - generic [ref=e372]:
+          - generic [ref=e373]: Normal baseline
+          - strong [ref=e374]: 0 focus
+        - paragraph [ref=e376]: Normal baseline centers on Waiting with fit 0% and motion 0%.
+      - article [ref=e377]:
+        - generic [ref=e378]:
+          - generic [ref=e379]: Focused baseline
+          - strong [ref=e380]: 0 focus
+        - paragraph [ref=e382]: Focused baseline centers on Waiting with quality anchor 0%.
+      - article [ref=e383]:
+        - generic [ref=e384]:
+          - generic [ref=e385]: Vs normal
+          - strong [ref=e386]: Waiting
+        - paragraph [ref=e389]: Waiting for a normal baseline to compare against.
+      - article [ref=e390]:
+        - generic [ref=e391]:
+          - generic [ref=e392]: Vs focused
+          - strong [ref=e393]: Waiting
+        - paragraph [ref=e396]: Waiting for a focused baseline to compare against.
+  - article [ref=e398]:
+    - generic [ref=e399]:
+      - generic [ref=e400]:
+        - paragraph [ref=e401]: Head position
+        - heading "Motion and tilt tracking" [level=2] [ref=e402]
+      - generic [ref=e403]: 95%
+    - paragraph [ref=e404]: Excellent stability. Head is tilted forward.
+    - generic [ref=e405]:
+      - article [ref=e406]:
+        - generic [ref=e407]: Pose
+        - heading "Orientation" [level=3] [ref=e408]
+        - paragraph [ref=e409]: Pitch 12.3 deg, roll -0.1 deg.
+      - article [ref=e410]:
+        - generic [ref=e411]: Motion
+        - heading "Stability" [level=3] [ref=e412]
+        - paragraph [ref=e413]: Very Still with gyro 8.07 dps and accel 0.995 g.
+      - article [ref=e414]:
+        - generic [ref=e415]: Accelerometer
+        - heading "16.3 Hz" [level=3] [ref=e416]
+        - img [ref=e418]
+        - paragraph [ref=e423]: X -0.212, Y -0.002, Z 0.972 g.
+      - article [ref=e424]:
+        - generic [ref=e425]: Gyroscope
+        - heading "16.6 Hz" [level=3] [ref=e426]
+        - img [ref=e428]
+        - paragraph [ref=e433]: X 0.987, Y -4.254, Z -6.782 dps.
+  - generic [ref=e435]:
+    - generic [ref=e436]:
+      - paragraph [ref=e437]: Wave viewer
+      - heading "Live EEG traces" [level=2] [ref=e438]
+    - paragraph [ref=e439]: The plot uses the latest rolling EEG window from MuseLSL when a live stream is available.
+  - generic [ref=e441]:
+    - article [ref=e442]:
+      - generic [ref=e443]:
+        - generic [ref=e444]:
+          - paragraph [ref=e445]: Timegraph
+          - heading "Battery and fit over time" [level=2] [ref=e446]
+        - paragraph [ref=e447]: Tracks the battery feed alongside the rolling skin-contact estimate.
+    - article [ref=e449]:
+      - generic [ref=e450]:
+        - generic [ref=e451]:
+          - paragraph [ref=e452]: Timegraph
+          - heading "Band power drift" [level=2] [ref=e453]
+        - paragraph [ref=e454]: Shows how alpha, beta, theta, delta, and gamma shift across the latest windows.
+  - generic [ref=e456]:
+    - generic [ref=e457]:
+      - generic [ref=e458]:
+        - paragraph [ref=e459]: Brain-wave balance
+        - heading "Band power mix" [level=2] [ref=e460]
+      - paragraph [ref=e461]: Delta, theta, alpha, beta, and gamma are estimated from the incoming EEG window.
+    - generic [ref=e462]:
+      - article [ref=e463]:
+        - generic [ref=e464]:
+          - heading "TP9" [level=3] [ref=e465]
+          - generic [ref=e466]: Trust 13%
+        - generic [ref=e467]:
+          - generic [ref=e468]: Delta
+          - generic [ref=e471]: 35%
+        - generic [ref=e472]:
+          - generic [ref=e473]: Theta
+          - generic [ref=e476]: 8%
+        - generic [ref=e477]:
+          - generic [ref=e478]: Alpha
+          - generic [ref=e481]: 11%
+        - generic [ref=e482]:
+          - generic [ref=e483]: Beta
+          - generic [ref=e486]: 29%
+        - generic [ref=e487]:
+          - generic [ref=e488]: Gamma
+          - generic [ref=e491]: 18%
+        - paragraph [ref=e492]: Drift 6%, spikes 0%, flatline 2%.
+      - article [ref=e493]:
+        - generic [ref=e494]:
+          - heading "AF7" [level=3] [ref=e495]
+          - generic [ref=e496]: Trust 0%
+        - generic [ref=e497]:
+          - generic [ref=e498]: Delta
+          - generic [ref=e501]: 12%
+        - generic [ref=e502]:
+          - generic [ref=e503]: Theta
+          - generic [ref=e506]: 9%
+        - generic [ref=e507]:
+          - generic [ref=e508]: Alpha
+          - generic [ref=e511]: 17%
+        - generic [ref=e512]:
+          - generic [ref=e513]: Beta
+          - generic [ref=e516]: 60%
+        - generic [ref=e517]:
+          - generic [ref=e518]: Gamma
+          - generic [ref=e521]: 2%
+        - paragraph [ref=e522]: Drift 8%, spikes 0%, flatline 1%.
+      - article [ref=e523]:
+        - generic [ref=e524]:
+          - heading "AF8" [level=3] [ref=e525]
+          - generic [ref=e526]: Trust 77%
+        - generic [ref=e527]:
+          - generic [ref=e528]: Delta
+          - generic [ref=e531]: 12%
+        - generic [ref=e532]:
+          - generic [ref=e533]: Theta
+          - generic [ref=e536]: 23%
+        - generic [ref=e537]:
+          - generic [ref=e538]: Alpha
+          - generic [ref=e541]: 12%
+        - generic [ref=e542]:
+          - generic [ref=e543]: Beta
+          - generic [ref=e546]: 46%
+        - generic [ref=e547]:
+          - generic [ref=e548]: Gamma
+          - generic [ref=e551]: 7%
+        - paragraph [ref=e552]: Drift 0%, spikes 2%, flatline 0%.
+      - article [ref=e553]:
+        - generic [ref=e554]:
+          - heading "TP10" [level=3] [ref=e555]
+          - generic [ref=e556]: Trust 71%
+        - generic [ref=e557]:
+          - generic [ref=e558]: Delta
+          - generic [ref=e561]: 10%
+        - generic [ref=e562]:
+          - generic [ref=e563]: Theta
+          - generic [ref=e566]: 14%
+        - generic [ref=e567]:
+          - generic [ref=e568]: Alpha
+          - generic [ref=e571]: 15%
+        - generic [ref=e572]:
+          - generic [ref=e573]: Beta
+          - generic [ref=e576]: 29%
+        - generic [ref=e577]:
+          - generic [ref=e578]: Gamma
+          - generic [ref=e581]: 32%
+        - paragraph [ref=e582]: Drift 2%, spikes 0%, flatline 0%.
+  - generic [ref=e583]:
+    - generic [ref=e584]:
+      - generic [ref=e585]:
+        - paragraph [ref=e586]: Signal health
+        - heading "Channel intensity snapshot" [level=2] [ref=e587]
+      - paragraph [ref=e588]: A quick look at each channel's mean, RMS, and peak amplitude in the rolling window.
+    - generic [ref=e589]:
+      - article [ref=e590]:
+        - heading "Signal continuity" [level=3] [ref=e591]
+        - paragraph [ref=e592]: How even the incoming EEG timing looks across the latest rolling window.
+        - generic [ref=e593]:
+          - generic [ref=e594]:
+            - text: Continuity
+            - strong [ref=e595]: 99.5 %
+          - generic [ref=e596]:
+            - text: Label
+            - strong [ref=e597]: Excellent
+          - generic [ref=e598]:
+            - text: Use
+            - strong [ref=e599]: Ready
+      - article [ref=e600]:
+        - heading "TP9" [level=3] [ref=e601]
+        - paragraph [ref=e602]: Quick intensity check for this electrode window.
+        - generic [ref=e603]:
+          - generic [ref=e604]:
+            - text: Mean abs
+            - strong [ref=e605]: 676.93 uV
+          - generic [ref=e606]:
+            - text: RMS
+            - strong [ref=e607]: 754.83 uV
+          - generic [ref=e608]:
+            - text: Peak
+            - strong [ref=e609]: 1000 uV
+      - article [ref=e610]:
+        - heading "AF7" [level=3] [ref=e611]
+        - paragraph [ref=e612]: Quick intensity check for this electrode window.
+        - generic [ref=e613]:
+          - generic [ref=e614]:
+            - text: Mean abs
+            - strong [ref=e615]: 313.12 uV
+          - generic [ref=e616]:
+            - text: RMS
+            - strong [ref=e617]: 321.33 uV
+          - generic [ref=e618]:
+            - text: Peak
+            - strong [ref=e619]: 487.79 uV
+      - article [ref=e620]:
+        - heading "AF8" [level=3] [ref=e621]
+        - paragraph [ref=e622]: Quick intensity check for this electrode window.
+        - generic [ref=e623]:
+          - generic [ref=e624]:
+            - text: Mean abs
+            - strong [ref=e625]: 258.09 uV
+          - generic [ref=e626]:
+            - text: RMS
+            - strong [ref=e627]: 277.6 uV
+          - generic [ref=e628]:
+            - text: Peak
+            - strong [ref=e629]: 531.25 uV
+      - article [ref=e630]:
+        - heading "TP10" [level=3] [ref=e631]
+        - paragraph [ref=e632]: Quick intensity check for this electrode window.
+        - generic [ref=e633]:
+          - generic [ref=e634]:
+            - text: Mean abs
+            - strong [ref=e635]: 557.57 uV
+          - generic [ref=e636]:
+            - text: RMS
+            - strong [ref=e637]: 638.54 uV
+          - generic [ref=e638]:
+            - text: Peak
+            - strong [ref=e639]: 1000 uV

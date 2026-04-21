@@ -1,0 +1,138 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - paragraph [ref=e5]: MuseLSL Studio
+      - heading "Battery-aware brain-wave monitoring for Muse 1 and Muse 2." [level=1] [ref=e6]
+      - paragraph [ref=e7]: Waiting for the first stream snapshot.
+      - generic [ref=e8]:
+        - generic [ref=e9]: Booting
+        - generic [ref=e10]: "Trust: warming up"
+        - generic [ref=e11]: "Source: starting"
+        - generic [ref=e12]: "Profile: Muse 2"
+        - generic [ref=e13]: "Version: detecting"
+    - generic [ref=e14]:
+      - paragraph [ref=e15]: Live sample rate
+      - generic [ref=e16]: 0 Hz
+      - generic [ref=e17]:
+        - article [ref=e18]:
+          - generic [ref=e19]: Artifacts
+          - strong [ref=e20]: 0%
+        - article [ref=e21]:
+          - generic [ref=e22]: Agreement
+          - strong [ref=e23]: 0%
+        - article [ref=e24]:
+          - generic [ref=e25]: Usable sensors
+          - strong [ref=e26]: 0/4
+      - paragraph [ref=e27]: The dashboard stays empty until a live MuseLSL stream comes online.
+  - generic [ref=e28]:
+    - article [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - paragraph [ref=e32]: Battery tracker
+          - heading "Keep an eye on headset endurance." [level=2] [ref=e33]
+        - generic [ref=e34]: "--%"
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - paragraph [ref=e39]: Battery state
+          - paragraph [ref=e40]: Unknown
+        - generic [ref=e41]:
+          - paragraph [ref=e42]: Trend
+          - paragraph [ref=e43]: Steady
+        - generic [ref=e44]:
+          - paragraph [ref=e45]: Telemetry
+          - paragraph [ref=e46]: Awaiting feed
+      - paragraph [ref=e47]: Muse 1 and Muse 2 battery state will appear here once telemetry arrives.
+    - article [ref=e48]:
+      - generic [ref=e50]:
+        - paragraph [ref=e51]: Support map
+        - heading "Muse hardware coverage" [level=2] [ref=e52]
+  - generic [ref=e53]:
+    - article [ref=e54]:
+      - generic [ref=e56]:
+        - paragraph [ref=e57]: Data sources
+        - heading "Everything coming off the headset" [level=2] [ref=e58]
+      - paragraph [ref=e59]: Waiting for stream diagnostics.
+    - article [ref=e60]:
+      - generic [ref=e62]:
+        - paragraph [ref=e63]: Telemetry
+        - heading "Battery, voltage, and temperature" [level=2] [ref=e64]
+      - paragraph [ref=e65]: Waiting for telemetry details.
+  - generic [ref=e66]:
+    - article [ref=e67]:
+      - generic [ref=e68]:
+        - generic [ref=e69]:
+          - paragraph [ref=e70]: Sensor fit
+          - heading "Skin contact estimate" [level=2] [ref=e71]
+        - generic [ref=e72]: "0"
+      - paragraph [ref=e73]: Waiting for a signal window before estimating sensor contact.
+    - article [ref=e74]:
+      - generic [ref=e76]:
+        - paragraph [ref=e77]: Version insight
+        - heading "Detected headset version" [level=2] [ref=e78]
+      - generic [ref=e79]:
+        - paragraph [ref=e80]: Detecting...
+        - paragraph [ref=e81]: "Confidence: waiting"
+        - paragraph [ref=e82]: "Identity: unknown"
+      - list
+  - generic [ref=e83]:
+    - article [ref=e84]:
+      - generic [ref=e86]:
+        - paragraph [ref=e87]: Signal confidence
+        - heading "Frontend trust surface" [level=2] [ref=e88]
+      - paragraph [ref=e89]: Waiting for enough signal to score artifacts and agreement.
+    - article [ref=e90]:
+      - generic [ref=e92]:
+        - paragraph [ref=e93]: Live sensor view
+        - heading "Official-style contact layout" [level=2] [ref=e94]
+      - paragraph [ref=e95]: Waiting for live contact estimates.
+  - generic [ref=e97]:
+    - article [ref=e98]:
+      - generic [ref=e99]:
+        - generic [ref=e100]:
+          - paragraph [ref=e101]: Overall brain state
+          - heading "Combined brain-wave view" [level=2] [ref=e102]
+        - generic [ref=e103]: "0"
+      - paragraph [ref=e104]: Waiting for a combined band view.
+    - article [ref=e105]:
+      - generic [ref=e106]:
+        - generic [ref=e107]:
+          - paragraph [ref=e108]: Calibration coach
+          - heading "Accuracy guidance" [level=2] [ref=e109]
+        - generic [ref=e110]: "0"
+      - paragraph [ref=e111]: Preparing guidance.
+      - list
+  - article [ref=e113]:
+    - generic [ref=e114]:
+      - generic [ref=e115]:
+        - paragraph [ref=e116]: Head position
+        - heading "Motion and tilt tracking" [level=2] [ref=e117]
+      - generic [ref=e118]: "0"
+    - paragraph [ref=e119]: Waiting for accelerometer and gyroscope data.
+  - generic [ref=e121]:
+    - generic [ref=e122]:
+      - paragraph [ref=e123]: Wave viewer
+      - heading "Live EEG traces" [level=2] [ref=e124]
+    - paragraph [ref=e125]: The plot uses the latest rolling EEG window from MuseLSL when a live stream is available.
+  - generic [ref=e127]:
+    - article [ref=e128]:
+      - generic [ref=e129]:
+        - generic [ref=e130]:
+          - paragraph [ref=e131]: Timegraph
+          - heading "Battery and fit over time" [level=2] [ref=e132]
+        - paragraph [ref=e133]: Tracks the battery feed alongside the rolling skin-contact estimate.
+    - article [ref=e135]:
+      - generic [ref=e136]:
+        - generic [ref=e137]:
+          - paragraph [ref=e138]: Timegraph
+          - heading "Band power drift" [level=2] [ref=e139]
+        - paragraph [ref=e140]: Shows how alpha, beta, theta, delta, and gamma shift across the latest windows.
+  - generic [ref=e143]:
+    - generic [ref=e144]:
+      - paragraph [ref=e145]: Brain-wave balance
+      - heading "Band power mix" [level=2] [ref=e146]
+    - paragraph [ref=e147]: Delta, theta, alpha, beta, and gamma are estimated from the incoming EEG window.
+  - generic [ref=e149]:
+    - generic [ref=e150]:
+      - paragraph [ref=e151]: Signal health
+      - heading "Channel intensity snapshot" [level=2] [ref=e152]
+    - paragraph [ref=e153]: A quick look at each channel's mean, RMS, and peak amplitude in the rolling window.
