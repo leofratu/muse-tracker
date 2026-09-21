@@ -1,298 +1,60 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MuseLSL Studio</title>
-    <link rel="stylesheet" href="/styles.css" />
-  </head>
-  <body>
-    <div class="ambient ambient-left"></div>
-    <div class="ambient ambient-right"></div>
-    <main class="shell">
-      <section class="hero panel">
-        <div>
-          <p class="eyebrow">MuseLSL Studio</p>
-          <h1>Battery-aware brain-wave monitoring for Muse 1 and Muse 2.</h1>
-          <p class="hero-copy" id="connection-copy">
-            Waiting for the first stream snapshot.
-          </p>
-          <div class="hero-chips">
-            <span class="chip" id="status-chip">Booting</span>
-            <span class="chip chip-outline" id="trust-chip">Trust: warming up</span>
-            <span class="chip chip-outline" id="source-chip">Source: starting</span>
-            <span class="chip chip-outline" id="model-chip">Profile: Muse 2</span>
-            <span class="chip chip-outline" id="version-chip">Version: detecting</span>
-          </div>
-        </div>
-        <div class="hero-callout">
-          <p class="callout-label">Live sample rate</p>
-          <div class="callout-value"><span id="sample-rate">0</span> Hz</div>
-          <div class="callout-metrics">
-            <article class="callout-metric">
-              <span>Artifacts</span>
-              <strong id="artifact-score">0%</strong>
-            </article>
-            <article class="callout-metric">
-              <span>Agreement</span>
-              <strong id="agreement-score">0%</strong>
-            </article>
-            <article class="callout-metric">
-              <span>Usable sensors</span>
-              <strong id="usable-channels">0/4</strong>
-            </article>
-          </div>
-          <p class="callout-note" id="callout-note">The dashboard stays empty until a live MuseLSL stream comes online.</p>
-        </div>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Muse Classic | EEG workstation</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f5b83'/%3E%3Cpath d='M5 17h5l3-8 5 15 3-7h6' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to workstation</a>
+  <aside class="sidebar" aria-label="Workstation navigation">
+    <a class="brand" href="#live"><span class="brand-mark" aria-hidden="true">m</span><span>Muse <strong>Classic</strong><small>EEG WORKSTATION</small></span></a>
+    <nav>
+      <a href="#live" class="nav-link">Live workspace <span aria-hidden="true">01</span></a>
+      <a href="#reference" class="nav-link">Reference <span aria-hidden="true">02</span></a>
+      <a href="#sessions" class="nav-link">Recordings <span aria-hidden="true">03</span></a>
+      <a href="#guide" class="nav-link">Signal guide <span aria-hidden="true">04</span></a>
+    </nav>
+    <div class="sidebar-note"><span class="eyebrow">LOCAL FIRST</span><p>Headset to browser.<br>No cloud upload.</p><small>Raw data stays on this computer.</small></div>
+  </aside>
+  <main id="main" tabindex="-1">
+    <header class="page-header" id="live">
+      <div><p class="eyebrow">PERSONAL SIGNAL LAB</p><h1>Live workspace</h1><p class="subtitle">Observe the signal. Keep the evidence.</p></div>
+      <div class="header-status"><span id="connection-status" class="status-pill" role="status">Connecting to server</span><small id="device-name">Waiting for headset</small></div>
+    </header>
+    <div id="notification" class="notification" role="status" hidden></div>
+    <section class="record-bar" aria-label="Recording controls">
+      <div class="record-title"><span id="record-light" class="record-light" aria-hidden="true"></span><div><strong id="record-state">Not recording</strong><small id="record-detail">Raw EEG, motion and event markers</small></div></div>
+      <label class="session-label">Session label<input id="session-label" maxlength="120" value="Untitled session" autocomplete="off"></label>
+      <span id="record-time" class="timer" aria-label="Recording duration">00:00</span>
+      <button id="record-start" class="button primary" disabled>Start recording</button>
+      <button id="record-stop" class="button" disabled>Stop &amp; save</button>
+    </section>
+    <section class="metrics-strip" aria-label="Live signal summary">
+      <div><span class="eyebrow">SAMPLE RATE</span><strong id="sample-rate">--</strong><small>Declared by the LSL source</small></div>
+      <div><span class="eyebrow">ADMITTED SENSORS</span><strong id="sensor-count">-- / 4</strong><small id="source-mode">Waiting for live data</small></div>
+      <div><span class="eyebrow">SIGNAL RELIABILITY</span><strong id="reliability">--</strong><small>Heuristic index, not accuracy</small></div>
+      <div><span class="eyebrow">HEADSET BATTERY</span><strong id="battery">--</strong><small id="battery-note">Telemetry not available</small></div>
+    </section>
+    <div class="workspace-grid">
+      <section class="panel waveform-panel" aria-labelledby="waveform-title">
+        <div class="panel-heading"><div><p class="eyebrow">TIME DOMAIN</p><h2 id="waveform-title">Four-channel EEG</h2></div><div class="chart-controls"><label>Scale<select id="wave-scale"><option value="25">±25 µV</option><option value="50">±50 µV</option><option value="100" selected>±100 µV</option><option value="250">±250 µV</option><option value="500">±500 µV</option></select></label><button class="button small" id="pause-chart" aria-pressed="false">Freeze charts</button></div></div>
+        <p id="signal-note" class="panel-note">Waiting for a live MuseLSL stream. No demonstration data is shown.</p>
+        <div class="canvas-wrap"><canvas id="waveform" role="img" aria-label="Four EEG waveforms. Channel statistics appear in the signal checks panel."></canvas></div>
+        <div class="chart-footer"><span>µV · display centered per channel · last 4 seconds</span><span id="sample-age">No samples received</span></div>
       </section>
-
-      <section class="dashboard-grid">
-        <article class="panel battery-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Battery tracker</p>
-              <h2>Keep an eye on headset endurance.</h2>
-            </div>
-            <div class="battery-value" id="battery-value">--%</div>
-          </div>
-          <div class="battery-bar-shell">
-            <div class="battery-bar-fill" id="battery-bar-fill"></div>
-          </div>
-          <div class="battery-meta">
-            <div>
-              <p class="meta-label">Battery state</p>
-              <p class="meta-value" id="battery-status">Unknown</p>
-            </div>
-            <div>
-              <p class="meta-label">Trend</p>
-              <p class="meta-value" id="battery-trend">Steady</p>
-            </div>
-            <div>
-              <p class="meta-label">Telemetry</p>
-              <p class="meta-value" id="battery-source">Awaiting feed</p>
-            </div>
-          </div>
-          <p class="panel-note" id="battery-note">
-            Muse 1 and Muse 2 battery state will appear here once telemetry arrives.
-          </p>
-        </article>
-
-        <article class="panel support-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Support map</p>
-              <h2>Muse hardware coverage</h2>
-            </div>
-          </div>
-          <div class="support-grid" id="support-grid"></div>
-        </article>
-      </section>
-
-      <section class="dashboard-grid">
-        <article class="panel sources-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Data sources</p>
-              <h2>Everything coming off the headset</h2>
-            </div>
-          </div>
-          <p class="panel-note" id="sources-note">Waiting for stream diagnostics.</p>
-          <div class="support-grid" id="stream-grid"></div>
-        </article>
-
-        <article class="panel telemetry-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Telemetry</p>
-              <h2>Battery, voltage, and temperature</h2>
-            </div>
-          </div>
-          <p class="panel-note" id="telemetry-note">Waiting for telemetry details.</p>
-          <div class="quality-metric-grid" id="telemetry-grid"></div>
-        </article>
-      </section>
-
-      <section class="dashboard-grid fit-grid">
-        <article class="panel fit-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Estimated contact</p>
-              <h2>EEG-derived skin contact estimate</h2>
-            </div>
-            <div class="fit-score" id="fit-score">0</div>
-          </div>
-          <p class="panel-note" id="fit-note">
-            Waiting for a signal window before estimating contact from EEG stability.
-          </p>
-          <div class="fit-channel-grid" id="fit-channel-grid"></div>
-        </article>
-
-        <article class="panel version-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Version insight</p>
-              <h2>Detected headset version</h2>
-            </div>
-          </div>
-          <div class="version-copy">
-            <p class="version-name" id="version-name">Detecting...</p>
-            <p class="version-meta" id="version-confidence">Confidence: waiting</p>
-            <p class="version-meta" id="version-identity">Identity: unknown</p>
-          </div>
-          <ul class="version-evidence" id="version-evidence"></ul>
-        </article>
-      </section>
-
-      <section class="dashboard-grid fit-grid">
-        <article class="panel quality-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Signal confidence</p>
-              <h2>Frontend trust surface</h2>
-            </div>
-          </div>
-          <p class="panel-note" id="quality-note">Waiting for enough signal to score artifacts and agreement.</p>
-          <div class="quality-metric-grid" id="quality-grid"></div>
-        </article>
-
-        <article class="panel official-fit-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Live sensor view</p>
-              <h2>Estimated contact layout</h2>
-            </div>
-          </div>
-          <p class="panel-note" id="official-fit-note">Waiting for live contact estimates.</p>
-          <div class="official-fit-shell" id="official-fit-shell"></div>
-        </article>
-      </section>
-
-      <section class="dashboard-grid fit-grid">
-        <article class="panel aggregate-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Overall brain state</p>
-              <h2>Combined brain-wave view</h2>
-            </div>
-            <div class="fit-score" id="plausibility-score">0</div>
-          </div>
-          <p class="panel-note" id="overall-brain-note">Waiting for a combined band view.</p>
-          <div class="bands-grid" id="overall-band-grid"></div>
-        </article>
-
-        <article class="panel calibration-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Calibration coach</p>
-              <h2>Accuracy guidance</h2>
-            </div>
-            <div class="fit-score" id="calibration-score">0</div>
-          </div>
-          <p class="panel-note" id="calibration-note">Preparing guidance.</p>
-          <ul class="version-evidence" id="calibration-guide"></ul>
-        </article>
-      </section>
-
-      <section class="dashboard-grid fit-grid">
-        <article class="panel quality-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Recovery guide</p>
-              <h2>Why the brain state is withheld</h2>
-            </div>
-          </div>
-          <p class="panel-note" id="withheld-note">Waiting for enough signal to explain the aggregate state.</p>
-          <div class="quality-metric-grid" id="withheld-grid"></div>
-        </article>
-      </section>
-
-      <section class="dashboard-grid fit-grid">
-        <article class="panel quality-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Baseline compare</p>
-              <h2>Normal vs focused baseline</h2>
-            </div>
-            <div class="fit-score" id="baseline-score">0</div>
-          </div>
-          <p class="panel-note" id="baseline-note">
-            Waiting for enough steady EEG to learn your rolling normal and focused baselines.
-          </p>
-          <div class="quality-metric-grid" id="baseline-grid"></div>
-        </article>
-      </section>
-
-      <section class="dashboard-grid fit-grid">
-        <article class="panel motion-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Head position</p>
-              <h2>Motion and tilt tracking</h2>
-            </div>
-            <div class="fit-score" id="motion-score">0</div>
-          </div>
-          <p class="panel-note" id="motion-note">Waiting for accelerometer and gyroscope data.</p>
-          <div class="fit-channel-grid" id="motion-grid"></div>
-        </article>
-      </section>
-
-      <section class="panel waveform-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Wave viewer</p>
-            <h2>Live EEG traces</h2>
-          </div>
-          <p class="panel-note">The plot uses the latest rolling EEG window from MuseLSL when a live stream is available.</p>
-        </div>
-        <canvas id="waveform-canvas"></canvas>
-      </section>
-
-      <section class="dashboard-grid trends-grid">
-        <article class="panel trend-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Timegraph</p>
-              <h2>Battery and estimated contact over time</h2>
-            </div>
-            <p class="panel-note">Tracks the battery feed alongside the rolling EEG-derived contact estimate.</p>
-          </div>
-          <canvas id="trend-canvas"></canvas>
-        </article>
-
-        <article class="panel trend-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Timegraph</p>
-              <h2>Band power drift</h2>
-            </div>
-            <p class="panel-note">Shows how alpha, beta, theta, delta, and gamma shift across the latest windows.</p>
-          </div>
-          <canvas id="band-trend-canvas"></canvas>
-        </article>
-      </section>
-
-      <section class="panel bands-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Brain-wave balance</p>
-            <h2>Band power mix</h2>
-          </div>
-          <p class="panel-note">Delta, theta, alpha, beta, and gamma are estimated from the incoming EEG window.</p>
-        </div>
-        <div class="bands-grid" id="bands-grid"></div>
-      </section>
-
-      <section class="panel moments-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Signal health</p>
-            <h2>Channel intensity snapshot</h2>
-          </div>
-          <p class="panel-note">A quick look at each channel's mean, RMS, and peak amplitude in the rolling window.</p>
-        </div>
-        <div class="moment-grid" id="moment-grid"></div>
-      </section>
-    </main>
-    <script src="/app.js" defer></script>
-  </body>
+      <section class="panel checks-panel" aria-labelledby="checks-title"><div class="panel-heading"><div><p class="eyebrow">BEFORE INTERPRETING</p><h2 id="checks-title">Signal checks</h2></div><span class="subtle-tag">ESTIMATED</span></div><p class="panel-note">Signal behavior is not an impedance measurement.</p><div id="channel-checks" class="channel-checks"></div><div class="diagnostic-note" id="timing-note">Timing diagnostics will appear with live EEG.</div></section>
+      <section class="panel" aria-labelledby="spectrum-title"><div class="panel-heading"><div><p class="eyebrow">FREQUENCY DOMAIN</p><h2 id="spectrum-title">Power spectrum</h2></div><label class="compact-label">Sensor<select id="spectrum-channel"><option value="all">All sensors</option><option>TP9</option><option>AF7</option><option>AF8</option><option>TP10</option></select></label></div><p class="panel-note">Welch PSD · 2-second Hann segments · 50% overlap</p><div class="canvas-wrap"><canvas id="spectrum" role="img" aria-label="Power spectral density by channel, 1 to 45 hertz. Dashed traces indicate excluded sensors."></canvas></div><div class="chart-footer"><span>dB relative to 1 µV²/Hz</span><span>Dashed = excluded sensor</span></div></section>
+      <section class="panel" aria-labelledby="bands-title"><div class="panel-heading"><div><p class="eyebrow">PER SENSOR</p><h2 id="bands-title">Band power</h2></div><label class="compact-label">Units<select id="power-mode"><option value="relative">Relative (%)</option><option value="absolute">Absolute (µV²)</option></select></label></div><p id="bands-note" class="panel-note">Relative power is normalized over 1–45 Hz.</p><div class="table-scroll"><table><caption class="sr-only">Band power by sensor. Excluded rows do not contribute to the aggregate.</caption><thead><tr><th scope="col">Sensor</th><th scope="col">δ<small>1–4 Hz</small></th><th scope="col">θ<small>4–8 Hz</small></th><th scope="col">α<small>8–13 Hz</small></th><th scope="col">β<small>13–30 Hz</small></th><th scope="col">γ<small>30–45 Hz</small></th></tr></thead><tbody id="band-rows"></tbody></table></div><p class="panel-note footnote">Gamma is especially vulnerable to muscle activity. No band is a direct measure of dopamine or acetylcholine.</p></section>
+      <section class="panel full-width" id="reference" aria-labelledby="reference-title"><div class="panel-heading"><div><p class="eyebrow">COMPARE LIKE WITH LIKE</p><h2 id="reference-title">Labelled reference</h2></div><span class="subtle-tag">DESCRIPTIVE ONLY</span></div><div class="reference-layout"><div><p class="panel-note">Capture the current admitted four-second window. A reference is not a validated “focused state” or a statistical baseline.</p><div class="inline-controls"><label>Reference label<input id="reference-label" value="Eyes open, seated" maxlength="120"></label><button class="button" id="capture-reference" disabled>Capture reference</button></div></div><div><p id="reference-note" class="panel-note">No reference captured.</p><div id="reference-shifts" class="reference-shifts"></div></div></div><div class="marker-row"><div><strong>Task markers</strong><small>Mark a task you perform separately. This does not launch a cognitive test.</small></div><label class="compact-label">Task<select id="task-label"><option>Eyes open rest</option><option>Eyes closed rest</option><option>Reading</option><option>Typing</option><option>PVT</option><option>Stroop</option><option>N-back</option></select></label><button class="button small" id="add-marker" disabled>Add marker</button></div></section>
+      <section class="panel full-width" id="sessions" aria-labelledby="sessions-title"><div class="panel-heading"><div><p class="eyebrow">YOUR LOCAL ARCHIVE</p><h2 id="sessions-title">Recordings</h2></div><button class="button small" id="refresh-sessions">Refresh archive</button></div><p class="panel-note">JSONL includes raw streams, markers, metadata and a completion footer. CSV contains raw EEG only.</p><div id="sessions-list" class="sessions-list"><p class="empty-copy">No recordings loaded yet.</p></div></section>
+      <section class="panel full-width" id="guide" aria-labelledby="guide-title"><div class="panel-heading"><div><p class="eyebrow">TRANSPARENT BY DESIGN</p><h2 id="guide-title">Source &amp; method</h2></div><span id="processing-version" class="subtle-tag">WELCH</span></div><div class="guide-grid"><div><h3>Source inventory</h3><dl id="stream-list"></dl><p id="source-identity" class="footnote"></p></div><div><h3>Hardware telemetry</h3><dl id="telemetry-list"></dl><p class="footnote">Unknown hardware units stay labelled raw. Stale values are hidden.</p></div><div><h3>Reading the workspace</h3><p>Reseat the sensors, relax your jaw and stay still. Wait for a continuous window before comparing spectra.</p><p>Quality gates reject obvious artifacts, not every source of contamination. These are exploratory signals, not medical measurements.</p><p id="method-note" class="footnote">Filtering and spectral settings appear when the server connects.</p></div></div></section>
+    </div>
+    <footer class="page-footer"><span>Muse Classic · Local EEG workstation</span><span>Not a medical device or neurotransmitter monitor.</span></footer>
+  </main>
+</body>
 </html>

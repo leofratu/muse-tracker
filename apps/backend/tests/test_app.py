@@ -1,425 +1,413 @@
 from __future__ import annotations
 
+import io
 import json
 import math
 import threading
 import time
-from urllib.request import urlopen
+from pathlib import Path
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
-import apps.backend.muse_lsl_bridge as muse_lsl_bridge
-from apps.backend.app import build_server
-from apps.backend.muse_lsl_bridge import (
-    MuseLSLBridge,
-    build_brain_state,
-    build_baseline_metrics,
-    build_fit_metrics,
-    build_motion_metrics,
-    build_signal_metrics,
-    extract_battery_percent,
-)
+import numpy as np
+import pytest
 
-
-def test_extract_battery_percent_accepts_common_ranges() -> None:
-    assert extract_battery_percent([0.72, 4.1, 512]) == 72.0
-    assert extract_battery_percent([83, 4.1, 512]) == 83.0
-    assert extract_battery_percent([200, 512]) is None
+import apps.backend.muse_lsl_bridge as bridge_module
+from apps.backend.app import MuseDashboardServer
+from apps.backend.muse_lsl_bridge import MuseLSLBridge, channel_layout, device_key
+from apps.backend.recording import Recorder, csv_rows
+from apps.backend.signal_processing import BANDS, analyze, integrate_band
+from scripts.analyze_recording import export_analysis
+from scripts.start_muse_stream import telemetry_payload
 
 
-def test_bridge_snapshot_stays_empty_until_live_data_arrives() -> None:
-    bridge = MuseLSLBridge(profile_key="muse-1", sample_rate_hz=32)
+def samples(frequency=10.6, amplitude=20.0, rate=256, seconds=4, start=100.0):
+    return [{"timestamp": start + i / rate,
+             "values": [amplitude * math.sin(2 * math.pi * frequency * i / rate)] * 4}
+            for i in range(int(rate * seconds))]
+
+
+def feed(bridge, data=None):
+    data = samples() if data is None else data
+    bridge.ingest("eeg", [(s["timestamp"], s["values"]) for s in data])
+    bridge.refresh()
+
+
+@pytest.mark.parametrize("frequency,band", [(2.3,"delta"),(6.2,"theta"),(10.6,"alpha"),(18.7,"beta"),(37.3,"gamma")])
+def test_off_integer_peaks_and_absolute_power(frequency, band):
+    result = analyze(samples(frequency), 256)
+    assert result["available"]
+    assert result["relative"][band] > 98
+    assert result["absolute"][band] == pytest.approx(200, rel=0.04)
+    assert sum(result["relative"].values()) == pytest.approx(100)
+
+
+def test_amplitude_scaling_is_quadratic_and_relative_power_invariant():
+    a, b = analyze(samples(amplitude=10),256), analyze(samples(amplitude=20),256)
+    assert b["absolute"]["alpha"] / a["absolute"]["alpha"] == pytest.approx(4)
+    assert b["relative"]["alpha"] == pytest.approx(a["relative"]["alpha"])
+
+
+def test_band_integrals_partition_boundaries_without_double_counting():
+    f, p = np.arange(0,129,.5), np.ones(258)
+    total = sum(integrate_band(f,p,lo,hi) for _,lo,hi in BANDS)
+    assert total == pytest.approx(integrate_band(f,p,1,45)) == 44
+
+
+def test_drift_suppression_preserves_alpha():
+    data = samples()
+    for i, sample in enumerate(data):
+        sample["values"] = [v + 40*math.sin(2*math.pi*.25*i/256) for v in sample["values"]]
+    result = analyze(data,256)
+    assert result["relative"]["alpha"] > result["relative"]["delta"]
+
+
+def test_line_noise_is_measured_before_notch_and_rejected():
+    data = samples()
+    for i, sample in enumerate(data):
+        sample["values"] = [v + 35*math.sin(2*math.pi*50*i/256) for v in sample["values"]]
+    result = analyze(data,256)
+    assert not result["available"]
+    assert result["channels"][0]["lineNoisePercent"] > 30
+    assert any("mains" in s for s in result["channels"][0]["reasons"])
+
+
+def test_clipped_rear_channels_fall_back_to_frontal_pair():
+    data = samples()
+    for i, sample in enumerate(data):
+        sample["values"][0] = sample["values"][3] = 990 if i%2 else -990
+    result = analyze(data,256)
+    assert result["available"]
+    assert result["sourceMode"] == "frontal-only"
+    assert result["sourceSensors"] == ["AF7","AF8"]
+
+
+def test_flat_channels_withhold_aggregate():
+    result = analyze(samples(amplitude=0),256)
+    assert not result["available"]
+    assert all("Flat signal" in row["reasons"] for row in result["channels"])
+
+
+@pytest.mark.parametrize("invalid", [float("nan"),float("inf"),-float("inf")])
+def test_nonfinite_data_is_rejected(invalid):
+    data = samples()
+    data[50]["values"][0] = invalid
+    assert analyze(data,256)["status"] == "invalid"
+
+
+def test_gaps_are_not_treated_as_regular_samples():
+    data = samples(seconds=5)
+    del data[700]
+    result = analyze(data,256)
+    assert not result["available"]
+    assert result["timing"]["gaps"] == 1
+
+
+def test_short_window_and_unavailable_gamma_do_not_report_zero_as_measurement():
+    assert analyze(samples(seconds=1),256)["status"] == "warming"
+    result = analyze(samples(rate=64),64)
+    assert not result["available"]
+    assert result["channels"][0]["absolute"]["gamma"] is None
+    assert all(v is None for v in result["channels"][0]["relative"].values())
+
+
+def test_motion_gates_and_normalized_reliability():
+    result = analyze(samples(),256)
+    assert result["reliabilityIndex"] <= 100
+    assert "accuracyScore" not in result
+    moving = analyze(samples(),256,motion={"moving":True})
+    assert not moving["available"] and moving["reliabilityIndex"] <= 25
+
+
+def test_explicit_profile_survives_generic_identity_and_auto_stays_unknown(tmp_path):
+    bridge = MuseLSLBridge(profile_key="muse-1",record_dir=tmp_path)
+    bridge.configure_source("Muse","Museabc",256)
+    bridge.refresh()
+    assert bridge.snapshot()["device"]["label"] == "Muse 1"
+    automatic = MuseLSLBridge(record_dir=tmp_path)
+    automatic.configure_source("Muse","Museabc",256)
+    automatic.refresh()
+    assert automatic.snapshot()["device"]["profile"] == "auto"
+
+
+def test_store_preserves_precision_rejects_invalid_and_does_not_shift_channels(tmp_path):
+    bridge = MuseLSLBridge(record_dir=tmp_path)
+    bridge.ingest("eeg", [(1.123456789,[1.23456789,2,3,4]), (2,[1,float("nan"),3,4]), (1,[4,3,2,1])])
+    bridge.refresh()
     snapshot = bridge.snapshot()
-
-    assert snapshot["device"]["label"] == "Muse 1"
-    assert snapshot["device"]["version"]["hardwareName"] == "Muse 1"
-    assert snapshot["battery"]["percent"] is None
-    assert snapshot["battery"]["history"] == []
-    assert snapshot["telemetry"]["available"] is False
-    assert snapshot["telemetry"]["history"] == []
-    assert snapshot["eeg"]["sampleCount"] == 0
-    assert snapshot["eeg"]["samples"] == []
-    assert snapshot["connection"]["mode"] == "waiting"
-    assert snapshot["connection"]["connected"] is False
-    assert snapshot["connection"]["streams"][0]["status"] == "waiting"
+    assert snapshot["eeg"]["samples"] == [{"timestamp":1.123456789,"values":[1.23456789,2.,3.,4.]}]
+    assert snapshot["connection"]["invalidSamples"] == 2
+    json.dumps(snapshot,allow_nan=False)
 
 
-def test_bridge_snapshot_contains_live_samples_and_telemetry() -> None:
-    bridge = MuseLSLBridge(profile_key="muse-1", sample_rate_hz=32)
-    now = time.time()
-    samples = [
-        (now + (index / 32.0), [12.0 + index, 10.0 + index, 8.0 + index, 6.0 + index])
-        for index in range(32)
-    ]
-    acc_samples = [
-        (now + (index * 0.02), [0.02 * index, 0.01 * index, 0.98])
-        for index in range(12)
-    ]
-    gyro_samples = [
-        (now + (index * 0.02), [0.2 * index, 0.1 * index, 0.05 * index])
-        for index in range(12)
-    ]
-    bridge.store.add_samples(samples)
-    bridge.store.add_motion_samples("acc", acc_samples)
-    bridge.store.add_motion_samples("gyro", gyro_samples)
-    bridge.store.update_telemetry([83.0, 0.79, 3.97, 30.8], source="lsl-telemetry")
-    bridge.store.set_connection(
-        connected=True,
-        stream_mode="lsl",
-        stream_name="Muse 1",
-        stream_source_id="test-source",
-        telemetry_available=True,
-        motion_available=True,
-        last_error=None,
-        profile_key="muse-1",
-        sample_rate_hz=32,
-    )
-
-    snapshot = bridge.snapshot()
-
-    assert snapshot["battery"]["percent"] == 83.0
-    assert snapshot["battery"]["history"]
-    assert snapshot["eeg"]["sampleCount"] > 0
-    assert len(snapshot["eeg"]["samples"][-1]["values"]) == 4
-    assert snapshot["sensorFit"]["channels"][0]["channel"] == "TP9"
-    assert snapshot["sensorFit"]["officialView"]["shape"] == "horseshoe"
-    assert snapshot["sensorFit"]["officialView"]["sensors"][0]["status"] in {
-        "excellent",
-        "good",
-        "fair",
-        "poor",
-        "waiting",
-    }
-    assert snapshot["sensorFit"]["channels"][0]["history"]
-    assert "score" in snapshot["sensorFit"]["channels"][0]["history"][-1]
-    assert "telemetry" in snapshot
-    assert "temperatureC" in snapshot["telemetry"]
-    assert snapshot["telemetry"]["available"] is True
-    assert snapshot["connection"]["streams"][0]["id"] == "eeg"
-    assert "confidenceScore" in snapshot["calibration"]
-    assert "headPose" in snapshot["motion"]
-    assert snapshot["motion"]["sensors"]["accelerometer"]["history"]
-    assert snapshot["eeg"]["metrics"]["moments"][0]["channel"] == "TP9"
-    assert snapshot["eeg"]["metrics"]["quality"]["label"] in {
-        "excellent",
-        "good",
-        "fair",
-        "poor",
-        "waiting",
-    }
-    assert 0 <= snapshot["eeg"]["metrics"]["quality"]["artifactScore"] <= 100
-    assert 0 <= snapshot["eeg"]["metrics"]["quality"]["lineNoiseScore"] <= 100
-    assert 0 <= snapshot["eeg"]["metrics"]["quality"]["contactScore"] <= 100
-    assert 0 <= snapshot["eeg"]["metrics"]["quality"]["stabilityScore"] <= 100
-    assert 0 <= snapshot["eeg"]["metrics"]["quality"]["accuracyScore"] <= 100
-    assert snapshot["eeg"]["metrics"]["quality"]["blockers"]
-    assert set(snapshot["eeg"]["metrics"]["overallBands"]) == {
-        "delta",
-        "theta",
-        "alpha",
-        "beta",
-        "gamma",
-    }
-    assert snapshot["eeg"]["metrics"]["deltaDominance"]["status"] in {
-        "balanced",
-        "elevated",
-        "strong",
-        "waiting",
-    }
-    assert snapshot["brainState"]["dominantBand"] in {
-        "delta",
-        "theta",
-        "alpha",
-        "beta",
-        "gamma",
-        "waiting",
-    }
-    assert 0 <= snapshot["brainState"]["plausibilityScore"] <= 100
-    assert "baseline" in snapshot
-    assert "vsNormal" in snapshot["baseline"]
-    assert "vsFocused" in snapshot["baseline"]
+def test_snapshots_are_read_only_and_cannot_mutate_cached_analysis(tmp_path):
+    bridge = MuseLSLBridge(record_dir=tmp_path)
+    feed(bridge)
+    one = bridge.snapshot()
+    two = bridge.snapshot()
+    assert one["history"] == two["history"]
+    assert one["generatedAt"] == two["generatedAt"]
+    one["analysis"]["channels"].clear()
+    assert len(bridge.snapshot()["analysis"]["channels"]) == 4
 
 
-def test_signal_metrics_reduce_slow_drift_bias() -> None:
-    sample_rate = 64
-    samples = []
-    for index in range(sample_rate * 3):
-        t = index / sample_rate
-        alpha_wave = 18.0 * math.sin(2.0 * math.pi * 10.0 * t)
-        slow_drift = 40.0 * math.sin(2.0 * math.pi * 0.28 * t)
-        value = alpha_wave + slow_drift
-        samples.append(
-            {
-                "timestamp": t,
-                "values": [value, value * 0.96, value * 1.04, value * 0.92],
-            }
-        )
-
-    metrics = build_signal_metrics(samples, sample_rate)
-
-    assert metrics["overallBands"]["alpha"] > metrics["overallBands"]["delta"]
-    assert metrics["quality"]["usableChannelCount"] >= 2
-    assert metrics["deltaDominance"]["status"] in {"balanced", "elevated"}
-    assert metrics["quality"]["driftScore"] >= 55
-    assert metrics["quality"]["accuracyScore"] >= 50
-
-
-def test_signal_metrics_penalize_line_noise_contamination() -> None:
-    sample_rate = 256
-    clean_samples = []
-    noisy_samples = []
-    for index in range(sample_rate * 2):
-        t = index / sample_rate
-        alpha_wave = 20.0 * math.sin(2.0 * math.pi * 10.0 * t)
-        mains_noise = 14.0 * math.sin(2.0 * math.pi * 50.0 * t)
-        clean_samples.append(
-            {
-                "timestamp": t,
-                "values": [alpha_wave, alpha_wave * 0.98, alpha_wave * 1.02, alpha_wave * 0.95],
-            }
-        )
-        contaminated = alpha_wave + mains_noise
-        noisy_samples.append(
-            {
-                "timestamp": t,
-                "values": [contaminated, contaminated * 0.98, contaminated * 1.02, contaminated * 0.95],
-            }
-        )
-
-    clean_metrics = build_signal_metrics(clean_samples, sample_rate)
-    noisy_metrics = build_signal_metrics(noisy_samples, sample_rate)
-
-    assert noisy_metrics["quality"]["lineNoiseScore"] < clean_metrics["quality"]["lineNoiseScore"]
-    assert noisy_metrics["quality"]["accuracyScore"] <= clean_metrics["quality"]["accuracyScore"]
-    assert "line noise" in " ".join(noisy_metrics["quality"]["blockers"]).lower()
-
-
-def test_build_baseline_metrics_compares_current_state_to_normal_and_focused_windows() -> None:
-    history = []
-    for index in range(60):
-        timestamp = 100.0 + index
-        beta = 18.0 + (index % 4)
-        alpha = 24.0 + ((index + 1) % 3)
-        delta = 18.0 - min(index * 0.1, 4.0)
-        theta = 20.0 - min(index * 0.05, 2.0)
-        gamma = max(0.0, 100.0 - (beta + alpha + delta + theta))
-        history.append(
-            {
-                "timestamp": timestamp,
-                "capturedAt": f"2026-04-21T00:00:{index:02d}+00:00",
-                "bands": {
-                    "delta": round(delta, 1),
-                    "theta": round(theta, 1),
-                    "alpha": round(alpha, 1),
-                    "beta": round(beta, 1),
-                    "gamma": round(gamma, 1),
-                },
-                "dominantBand": "alpha",
-                "accuracyScore": 68.0 + (index % 5),
-                "fitScore": 60.0 + (index % 4),
-                "motionScore": 78.0,
-                "continuityScore": 93.0,
-                "qualityAnchor": 72.0 + (index % 6),
-                "focusIndex": 55.0 + (index * 0.35),
-                "calmIndex": 58.0,
-                "acceptedForBaseline": True,
-                "eligibleNormal": True,
-            }
-        )
-
-    current = {
-        "timestamp": 161.0,
-        "capturedAt": "2026-04-21T00:02:41+00:00",
-        "bands": {
-            "delta": 11.0,
-            "theta": 18.0,
-            "alpha": 26.0,
-            "beta": 31.0,
-            "gamma": 14.0,
-        },
-        "dominantBand": "beta",
-        "accuracyScore": 81.0,
-        "fitScore": 67.0,
-        "motionScore": 84.0,
-        "continuityScore": 97.0,
-        "qualityAnchor": 83.0,
-        "focusIndex": 74.0,
-        "calmIndex": 52.0,
-        "acceptedForBaseline": True,
-        "eligibleNormal": True,
-    }
-
-    baseline = build_baseline_metrics(history=history, current_point=current)
-
-    assert baseline["available"] is True
-    assert baseline["windowCount"] >= 30
-    assert baseline["durationSeconds"] >= 29.0
-    assert baseline["normal"]["dominantBand"] in {"alpha", "beta"}
-    assert baseline["focused"]["focusIndex"] >= baseline["normal"]["focusIndex"]
-    assert baseline["vsNormal"]["status"] in {"more focused", "close", "less focused"}
-    assert baseline["vsFocused"]["summary"]
-    assert baseline["history"]
-
-
-def test_brain_state_falls_back_to_frontal_pair_when_rear_channels_are_rail_contaminated() -> None:
-    sample_rate = 256
-    samples = []
-    for index in range(sample_rate * 4):
-        t = index / sample_rate
-        frontal = (18.0 * math.sin(2.0 * math.pi * 10.0 * t)) + (7.0 * math.sin(2.0 * math.pi * 18.0 * t))
-        rear_noise = 980.0 if index % 40 == 0 else ((index % 2) * 180.0 - 90.0)
-        samples.append(
-            {
-                "timestamp": t,
-                "values": [rear_noise, frontal * 0.98, frontal * 1.02, -rear_noise],
-            }
-        )
-
-    fit_metrics = build_fit_metrics(samples, sample_rate)
-    motion_metrics = build_motion_metrics([], [])
-    metrics = build_signal_metrics(samples, sample_rate, fit_metrics=fit_metrics, motion_metrics=motion_metrics)
-    brain_state = build_brain_state(metrics, fit_metrics, motion_metrics)
-
-    assert brain_state["withheld"] is False
-    assert brain_state["sourceMode"] == "frontal-only"
-    assert brain_state["sourceSensors"] == ["AF7", "AF8"]
-    assert brain_state["overallBands"]["alpha"] > brain_state["overallBands"]["delta"]
-    rejected = {channel["channel"]: channel["rejectReasons"] for channel in metrics["bands"] if not channel["admitted"]}
-    assert "TP9" in rejected
-    assert any("clipping" in reason.lower() or "railing" in reason.lower() for reason in rejected["TP9"])
-
-
-def test_brain_state_is_withheld_when_clean_sensor_coverage_is_too_low() -> None:
-    sample_rate = 256
-    samples = []
-    for index in range(sample_rate * 4):
-        t = index / sample_rate
-        clean = 16.0 * math.sin(2.0 * math.pi * 10.0 * t)
-        clipped = 999.51 if index % 18 == 0 else -999.51 if index % 19 == 0 else 0.0
-        flat = 0.0
-        samples.append(
-            {
-                "timestamp": t,
-                "values": [clipped, clean, clipped, flat],
-            }
-        )
-
-    fit_metrics = build_fit_metrics(samples, sample_rate)
-    motion_metrics = build_motion_metrics([], [])
-    metrics = build_signal_metrics(samples, sample_rate, fit_metrics=fit_metrics, motion_metrics=motion_metrics)
-    brain_state = build_brain_state(metrics, fit_metrics, motion_metrics)
-
-    assert brain_state["withheld"] is True
-    assert brain_state["sourceMode"] == "withheld"
-    assert any("low clean-window coverage" in reason.lower() for reason in brain_state["withheldReasons"])
-
-
-def test_bridge_falls_back_to_pull_sample_when_chunks_are_empty(monkeypatch) -> None:
-    class FakeStream:
-        def __init__(self, stream_type: str, name: str, source_id: str, rate: float, channels: int) -> None:
-            self._type = stream_type
-            self._name = name
-            self._source_id = source_id
-            self._rate = rate
-            self._channels = channels
-
-        def type(self) -> str:
-            return self._type
-
-        def name(self) -> str:
-            return self._name
-
-        def source_id(self) -> str:
-            return self._source_id
-
-        def nominal_srate(self) -> float:
-            return self._rate
-
-        def channel_count(self) -> int:
-            return self._channels
-
-    class FakeInlet:
-        def __init__(self, chunk=None, timestamps=None, samples=None) -> None:
-            self._chunk = chunk or []
-            self._timestamps = timestamps or []
-            self._samples = list(samples or [])
-            self.opened = False
-
-        def open_stream(self, timeout: float | None = None) -> None:
-            self.opened = True
-
-        def pull_chunk(self, timeout: float = 0.0, max_samples: int = 1):
-            chunk, timestamps = self._chunk, self._timestamps
-            self._chunk, self._timestamps = [], []
-            return chunk, timestamps
-
-        def pull_sample(self, timeout: float = 0.0):
-            if self._samples:
-                return self._samples.pop(0)
-            return None, None
-
-    streams_by_type = {
-        "EEG": [FakeStream("EEG", "Muse", "Muse123", 256.0, 5)],
-        "ACC": [FakeStream("ACC", "Muse ACC", "Muse123", 52.0, 3)],
-        "GYRO": [FakeStream("GYRO", "Muse GYRO", "Muse123", 52.0, 3)],
-    }
-    inlets = {
-        "EEG": FakeInlet(samples=[([1.0, 2.0, 3.0, 4.0, 9.0], 100.0)]),
-        "ACC": FakeInlet(chunk=[[0.1, 0.2, 0.98]], timestamps=[100.01]),
-        "GYRO": FakeInlet(chunk=[[0.3, 0.2, 0.1]], timestamps=[100.02]),
-    }
-
-    def fake_resolve_byprop(prop: str, value: str, timeout: float = 0.0):
-        assert prop == "type"
-        return streams_by_type.get(value, [])
-
-    def fake_stream_inlet(stream, max_buflen=None):
-        return inlets[stream.type()]
-
-    monkeypatch.setattr(muse_lsl_bridge, "resolve_byprop", fake_resolve_byprop)
-    monkeypatch.setattr(muse_lsl_bridge, "StreamInlet", fake_stream_inlet)
-
-    bridge = MuseLSLBridge(profile_key="muse-2", sample_rate_hz=256)
-    assert bridge._try_pull_lsl() is True
-
-    snapshot = bridge.snapshot()
-
-    assert snapshot["connection"]["connected"] is True
-    assert snapshot["eeg"]["sampleCount"] == 1
-    assert snapshot["eeg"]["samples"][-1]["values"] == [1.0, 2.0, 3.0, 4.0]
-    assert snapshot["motion"]["available"] is True
-    assert snapshot["motion"]["sensors"]["accelerometer"]["history"]
-    assert snapshot["motion"]["sensors"]["gyroscope"]["history"]
-    assert inlets["EEG"].opened is True
-
-
-def test_http_server_exposes_health_and_status() -> None:
-    server = build_server(host="127.0.0.1", port=0, profile_key="muse-2")
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
+def test_slow_analysis_does_not_hold_acquisition_lock(tmp_path,monkeypatch):
+    bridge = MuseLSLBridge(record_dir=tmp_path)
+    data = samples()
+    bridge.ingest("eeg",[(s["timestamp"],s["values"]) for s in data])
+    entered, release, ingested = threading.Event(), threading.Event(), threading.Event()
+    original = bridge_module.analyze
+    def slow(*args,**kwargs):
+        entered.set()
+        assert release.wait(2)
+        return original(*args,**kwargs)
+    monkeypatch.setattr(bridge_module,"analyze",slow)
+    worker = threading.Thread(target=bridge.refresh)
+    worker.start()
     try:
-        time.sleep(0.25)
-        host, port = server.server_address
-        with urlopen(f"http://{host}:{port}/") as response:
-            shell = response.read().decode("utf-8")
-        with urlopen(f"http://{host}:{port}/healthz") as response:
-            health = json.loads(response.read().decode("utf-8"))
-        with urlopen(f"http://{host}:{port}/api/status") as response:
-            snapshot = json.loads(response.read().decode("utf-8"))
+        assert entered.wait(1)
+        def ingest():
+            bridge.ingest("eeg",[(105.,[1,2,3,4])])
+            ingested.set()
+        acquisition = threading.Thread(target=ingest)
+        acquisition.start()
+        assert ingested.wait(.5), "DSP held the ingestion lock"
+        acquisition.join(1)
     finally:
-        server.shutdown()
-        server.bridge.stop()
-        server.server_close()
-        thread.join(timeout=1.0)
+        release.set()
+        worker.join(2)
 
-    assert "MuseLSL Studio" in shell
-    assert health["ok"] is True
-    assert snapshot["device"]["label"] == "Muse 2"
-    assert snapshot["connection"]["mode"] in {"waiting", "lsl"}
-    assert snapshot["eeg"]["sampleRateHz"] > 0
-    assert "hardwareName" in snapshot["device"]["version"]
-    assert "sensorFit" in snapshot
-    assert "calibration" in snapshot
-    assert "motion" in snapshot
-    assert "brainState" in snapshot
-    assert "officialView" in snapshot["sensorFit"]
-    assert "streams" in snapshot["connection"]
-    assert "telemetry" in snapshot
+
+def test_stale_streams_hide_analysis_motion_and_battery(tmp_path):
+    bridge = MuseLSLBridge(record_dir=tmp_path)
+    feed(bridge)
+    bridge.ingest("telemetry",[(100,[83,1234,3400,30])])
+    bridge.ingest("acc",[(100,[0,0,1])])
+    bridge.refresh()
+    assert bridge.snapshot()["telemetry"]["batteryPercent"] == 83
+    with bridge._lock:
+        for kind in bridge._received:
+            bridge._received[kind] -= 60
+    bridge.refresh()
+    snapshot = bridge.snapshot()
+    assert snapshot["connection"]["status"] == "stale"
+    assert not snapshot["analysis"]["available"]
+    assert snapshot["telemetry"]["batteryPercent"] is None
+    assert snapshot["motion"]["accelerometer"] is None
+
+
+def test_reference_requires_live_admitted_data_and_resets_on_reconnect(tmp_path):
+    bridge = MuseLSLBridge(record_dir=tmp_path)
+    with pytest.raises(ValueError):
+        bridge.capture_reference("rest")
+    bridge.configure_source("Muse","Musea",256)
+    feed(bridge)
+    bridge.capture_reference("eyes open")
+    bridge.refresh()
+    assert bridge.snapshot()["reference"]["available"]
+    assert bridge.snapshot()["reference"]["relativeShift"]["alpha"] == 0
+    bridge.configure_source("Muse","Musea",256)
+    feed(bridge,samples(start=200))
+    assert not bridge.snapshot()["reference"]["available"]
+
+
+class FakeStream:
+    def __init__(self,kind,identity="Musea"):
+        self.kind,self.identity=kind,identity
+    def type(self): return self.kind
+    def name(self): return "Muse"
+    def source_id(self): return self.identity
+    def nominal_srate(self): return 256
+    def channel_count(self): return 5 if self.kind=="EEG" else 4 if self.kind=="Telemetry" else 3
+
+
+def test_auxiliary_device_matching_and_late_discovery(tmp_path,monkeypatch):
+    available={"EEG":[FakeStream("EEG")],"ACC":[],"GYRO":[],"Telemetry":[]}
+    opened=[]
+    class Inlet:
+        def __init__(self,stream,**kwargs): self.stream=stream;self.sent=False;opened.append(stream)
+        def open_stream(self,**kwargs): pass
+        def close_stream(self): pass
+        def pull_chunk(self,**kwargs): return [],[]
+        def pull_sample(self,**kwargs):
+            if self.sent:return None,None
+            self.sent=True
+            return ([1,2,3,4,5] if self.stream.kind=="EEG" else [0,0,1]),100.
+    monkeypatch.setattr(bridge_module,"StreamInlet",Inlet)
+    monkeypatch.setattr(bridge_module,"resolve_byprop",lambda prop,value,**kw:available[value])
+    bridge=MuseLSLBridge(profile_key="muse-1",record_dir=tmp_path)
+    assert bridge._try_pull_lsl()
+    assert len(opened)==1
+    available["ACC"]=[FakeStream("ACC","MuseACCwrong"),FakeStream("ACC","MuseACCa")]
+    bridge._last_resolve=-100
+    bridge._try_pull_lsl()
+    assert opened[-1].identity=="MuseACCa"
+    bridge.refresh()
+    assert bridge.snapshot()["motion"]["accelerometer"]==[0.,0.,1.]
+    assert bridge.snapshot()["device"]["label"]=="Muse 1"
+    bridge.stop()
+
+
+def test_metadata_fallback_and_device_key():
+    assert device_key(FakeStream("ACC","MuseACC123"))=="123"
+    assert channel_layout(FakeStream("EEG"))==([0,1,2,3],[1.,1.,1.,1.])
+
+
+def test_telemetry_preserves_percent_and_raw_fields():
+    assert telemetry_payload(83,1122,3400,30)==[83.,1122.,3400.,30.]
+    assert telemetry_payload(1,1122,3400,30)[0]==1
+    with pytest.raises(ValueError): telemetry_payload(8300,0,0,0)
+
+
+def test_recording_roundtrip_markers_metadata_csv_and_offline_analysis(tmp_path):
+    bridge=MuseLSLBridge(record_dir=tmp_path)
+    bridge.configure_source("Muse","Musea",256)
+    feed(bridge)
+    state=bridge.start_recording("test session")
+    bridge.mark("Eyes open rest")
+    data=samples(start=104)
+    feed(bridge,data)
+    final=bridge.recorder.stop()
+    assert not final["error"] and final["samplesWritten"]==1024
+    path=bridge.recorder.path_for(state["id"])
+    records=[json.loads(line) for line in path.read_text().splitlines()]
+    assert records[0]["metadata"]["settings"]["method"]=="Welch"
+    assert any(e["type"]=="marker" for e in records)
+    assert records[-1]["complete"] is True
+    raw=next(e for e in records if e["type"]=="eeg")["samples"]
+    assert raw==data
+    assert len(b"".join(csv_rows(path)).decode().splitlines())==1025
+    output=io.StringIO()
+    export_analysis(path,output)
+    assert len(output.getvalue().splitlines())==5
+    assert bridge.recorder.sessions()[0]["complete"] is True
+
+
+def test_queue_overflow_is_explicit_and_footer_incomplete(tmp_path,monkeypatch):
+    recorder=Recorder(tmp_path,queue_size=1)
+    release=threading.Event()
+    original=recorder._write
+    def paused(handle):
+        assert release.wait(2)
+        original(handle)
+    monkeypatch.setattr(recorder,"_write",paused)
+    result=recorder.start("queue test",{})
+    event={"type":"eeg","samples":[{"timestamp":1,"values":[1,2,3,4]}],"receivedAt":"test","epoch":0}
+    try:
+        recorder.enqueue(event)
+        recorder.enqueue(event)
+        assert not recorder.status()["active"]
+        assert recorder.status()["droppedSamples"]==1
+    finally:
+        release.set()
+        recorder.stop()
+    footer=json.loads(recorder.path_for(result["id"]).read_text().splitlines()[-1])
+    assert footer["complete"] is False
+
+
+def test_recording_disk_sync_error_remains_visible(tmp_path,monkeypatch):
+    recorder=Recorder(tmp_path)
+    recorder.start("write failure",{})
+    def fail(fd): raise OSError("disk sync failed")
+    monkeypatch.setattr("apps.backend.recording.os.fsync",fail)
+    assert "failed" in recorder.stop()["error"]
+    assert recorder.sessions()[0]["complete"] is False
+
+
+@pytest.mark.parametrize("identifier", ["../private","../../etc/passwd","anything","20260921T170000Z-12345678/../../x"])
+def test_export_paths_are_restricted(tmp_path,identifier):
+    with pytest.raises(ValueError): Recorder(tmp_path).path_for(identifier)
+
+
+@pytest.fixture
+def http_server(tmp_path):
+    bridge=MuseLSLBridge(record_dir=tmp_path)
+    server=MuseDashboardServer(("127.0.0.1",0),bridge)
+    thread=threading.Thread(target=server.serve_forever,daemon=True)
+    thread.start()
+    yield server,f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+    thread.join(2)
+
+
+def test_http_health_static_and_read_only_status(http_server):
+    server,url=http_server
+    with urlopen(url+"/") as response:
+        assert b"Muse Classic" in response.read()
+        assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
+    with urlopen(url+"/healthz?check=1") as response:
+        assert json.load(response)["ok"]
+    with urlopen(url+"/api/status") as response:
+        status=json.load(response)
+        assert status["schemaVersion"]==2 and status["controlToken"]==server.control_token
+        assert status["analysis"]["status"]=="waiting"
+
+
+@pytest.mark.parametrize("path",["/../frontend-other/secret","/%2e%2e/README.md","/recordings/","/apps/","//etc/passwd"])
+def test_static_traversal_and_directory_reads_are_rejected(http_server,path):
+    _,url=http_server
+    with pytest.raises(HTTPError) as error: urlopen(url+path)
+    assert error.value.code==404
+
+
+def test_local_controls_require_host_token_origin_and_json_object(http_server):
+    server,url=http_server
+    def post(payload,headers):
+        return urlopen(Request(url+"/api/record/start",data=payload,headers=headers,method="POST"))
+    with pytest.raises(HTTPError) as error:post(b'{}',{"Content-Type":"application/json"})
+    assert error.value.code==403
+    headers={"Content-Type":"application/json","X-Muse-Token":server.control_token,"Origin":"https://attacker.invalid"}
+    with pytest.raises(HTTPError) as error:post(b'{}',headers)
+    assert error.value.code==403
+    headers.pop("Origin")
+    with pytest.raises(HTTPError) as error:post(b'[]',headers)
+    assert error.value.code==400
+    with pytest.raises(HTTPError) as error:post(b'{"label":"rest"}',{**headers,"Host":"attacker.invalid"})
+    assert error.value.code==403
+
+
+def test_http_recording_control_and_export(http_server):
+    server,url=http_server
+    feed(server.bridge)
+    headers={"Content-Type":"application/json","X-Muse-Token":server.control_token}
+    request=Request(url+"/api/record/start",data=b'{"label":"http test"}',headers=headers)
+    with urlopen(request) as response: state=json.load(response)
+    export=url+f'/api/sessions/{state["id"]}/export'
+    with pytest.raises(HTTPError) as error:urlopen(export)
+    assert error.value.code==409
+    feed(server.bridge,samples(start=104))
+    with urlopen(Request(url+"/api/record/stop",data=b'{}',headers=headers)) as response:
+        assert json.load(response)["active"] is False
+    with urlopen(export) as response: assert b'"complete": true' in response.read()
+
+
+def test_server_rejects_non_loopback_binding(tmp_path):
+    with pytest.raises(ValueError):
+        MuseDashboardServer(("0.0.0.0",0),MuseLSLBridge(record_dir=tmp_path))
+
+
+def test_real_http_sse_delivers_cached_snapshot(http_server):
+    _, url = http_server
+    with urlopen(url + "/api/stream", timeout=3) as response:
+        assert response.headers["Content-Type"] == "text/event-stream"
+        assert response.readline() == b"event: snapshot\n"
+        payload = json.loads(response.readline().decode().removeprefix("data: "))
+        assert payload["schemaVersion"] == 2
+        assert payload["analysis"]["status"] == "waiting"
+
+
+def test_malformed_csv_export_is_rejected_before_headers(http_server):
+    server, url = http_server
+    feed(server.bridge)
+    state = server.bridge.start_recording("interrupted file")
+    server.bridge.recorder.stop()
+    path = server.bridge.recorder.path_for(state["id"])
+    with path.open("a") as handle:
+        handle.write('{"partial":')
+    export = url + f'/api/sessions/{state["id"]}/export'
+    with pytest.raises(HTTPError) as error:
+        urlopen(export + "?format=csv")
+    assert error.value.code == 400
+    with urlopen(export) as response:
+        assert response.read().endswith(b'{"partial":')

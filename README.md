@@ -1,157 +1,99 @@
-# Muse Tracker
+# Muse Classic
 
-Muse Tracker is a local live-only MuseLSL dashboard for Muse 1 and Muse 2 headsets. It focuses on real EEG streaming, telemetry, sensor-contact estimation, motion-aware calibration, and deeper signal-reliability scoring.
+A local EEG workstation for a Muse headset and MuseLSL. Four-channel waveforms, Welch spectra, transparent signal checks, labelled references and raw recordings. Nothing is simulated in the production app: without a headset stream, it waits.
 
-If no real MuseLSL stream is available, the dashboard stays in a waiting state instead of showing synthetic demo data.
+**This is exploratory software, not a medical device or a dopamine, acetylcholine, intelligence or focus meter.** The reliability index is an unvalidated diagnostic heuristic. Passing its checks does not prove that a signal is free of eye or muscle activity.
 
-## Features
+## Start with Muse 1
 
-- Live EEG viewer for the four Muse channels: `TP9`, `AF7`, `AF8`, `TP10`
-- Muse family/version inference from stream identity and telemetry availability
-- Battery + telemetry surfaces when the Muse stream exposes `Telemetry`
-- Sensor-fit and skin-contact estimates derived from rolling EEG behavior
-- Head tilt and motion tracking from `ACC` and `GYRO` streams
-- Accuracy-oriented reliability stack with:
-  - artifact control
-  - channel agreement
-  - drift suppression
-  - line-noise rejection
-  - contact confidence
-  - split-window stability
-  - motion stability
-  - continuity-aware overall accuracy scoring
-- Calibration guidance that reacts to contact quality, motion, continuity, delta dominance, battery state, and line noise
-- Time graphs for battery/fit trends and band drift
-- Data-source inventory for `EEG`, `Telemetry`, `ACC`, and `GYRO`
-
-## Repository layout
-
-- `apps/backend/app.py` - local HTTP server, SSE stream, and static asset serving
-- `apps/backend/muse_lsl_bridge.py` - MuseLSL bridge, signal processing, telemetry handling, fit estimation, motion analysis, and calibration logic
-- `apps/backend/tests/test_app.py` - backend regression tests and snapshot validation
-- `apps/frontend/index.html` - dashboard layout
-- `apps/frontend/app.js` - live rendering, chart drawing, and accuracy surfaces
-- `apps/frontend/styles.css` - frontend styling
-- `scripts/start_muse_stream.py` - direct Muse-to-LSL launcher with EEG, telemetry, accelerometer, and gyroscope streams
-- `repo_plan/` - RPG planning artifacts and per-run logs
-
-## Requirements
-
-- Python 3.10+
-- Node.js (used for frontend syntax checks)
-- A Muse headset powered on and paired through your local MuseLSL workflow
-- `muselsl` and `pylsl` in your Python environment
-
-## Quick start
-
-### 1) Create a Python environment
+Use Python 3.11 or newer. The hardware launcher also needs Bluetooth permissions and a working native `liblsl` installation for your operating system.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install muselsl pylsl
+source .venv/bin/activate
+python -m pip install -r requirements-hardware.txt
+
+# Terminal 1: replace the name with your headset's advertised name.
+python scripts/start_muse_stream.py --profile muse-1 --name YOUR_MUSE_NAME
+
+# Terminal 2, using the same environment:
+python apps/backend/app.py --profile muse-1 --mains 50
 ```
 
-### 2) Start the Muse stream launcher
+Open `http://127.0.0.1:8000`. Use `--address YOUR_DEVICE_ADDRESS` instead of `--name` when appropriate. Close other apps using the headset. Actual Bluetooth compatibility depends on the headset generation, firmware and MuseLSL backend; choosing a profile does not change the hardware protocol.
 
-For the richest dashboard data, start the direct launcher so `EEG`, `Telemetry`, `ACC`, and `GYRO` are all exposed:
+Use `--profile muse-2` for Muse 2. The dashboard also supports `--profile auto`, which leaves unidentified streams as **Unknown Muse** rather than guessing Muse 2. Explicit profile choices are preserved. `--source-id EXACT_LSL_SOURCE_ID` selects one particular EEG source when multiple headsets are present.
+
+The included launcher publishes EEG, accelerometer, gyroscope and telemetry streams with a shared device identity. The dashboard can use other MuseLSL sources, but absent auxiliary streams remain unavailable. Hardware telemetry other than battery is displayed as decoded **raw values**, not guessed percentages, volts or degrees Celsius.
+
+## The workspace
+
+The live workspace contains a four-second, four-channel waveform with a selectable vertical scale, a PSD plot, per-channel band powers, signal checks and a compact connection/recording strip. **Freeze charts** freezes only the display; acquisition and recording continue. Waiting, warming-up, stale, rejected and backend-offline states are separate.
+
+Spectra use a four-second analysis window, a 0.5 Hz high-pass filter, optional 50/60 Hz notch, and Welch PSD with two-second Hann segments, 50% overlap and linear detrending. All available frequency bins are integrated with interpolated band boundaries. Absolute power is in µV²; relative power is normalized over 1–45 Hz. Missing frequency coverage is unavailable, not zero. Use `--mains 60` or `--mains 0` to change or disable the notch.
+
+The aggregate is an equal-weight mean of at least three admitted sensors, or the AF7/AF8 pair when only the frontal pair qualifies. Individual rejected spectra remain visible for diagnosis. No cross-channel similarity or preferred band pattern is treated as proof of accuracy.
+
+**Capture reference** stores the current admitted four-second spectrum with a label. Comparisons are descriptive percentage-point changes, not statistical significance or a learned focused state. Stream restarts clear the reference; different sensor sets cannot be compared. Task markers label activities performed separately. Selecting PVT or Stroop does not launch a cognitive test.
+
+## Record and export
+
+Press **Start recording**, optionally add markers, then **Stop & save**. The default directory is `recordings/`; change it with `--record-dir PATH`. Recording starts with new arriving samples, not the preceding chart buffer.
+
+Each schema-v2 JSONL recording contains its metadata, raw four-channel EEG, available motion/telemetry, source epochs, task/reference markers, rejected-sample counts and a completion footer. Original accepted numeric samples and LSL timestamps are not rounded, clipped or filtered. Explicitly labelled volts/millivolts are converted to µV; the AUX channel is not recorded. Non-finite, malformed and non-increasing EEG samples are rejected and counted.
+
+The archive offers **JSONL** and **CSV** exports after stopping. CSV contains raw EEG only; retain JSONL for markers and metadata. An interrupted/corrupt JSONL remains downloadable for recovery, while malformed CSV conversions are rejected before download begins. A finalized file means the writer finished successfully, not that every EEG window was clean or that Bluetooth lost no data. Queue overflow and write failures stop recording and are displayed explicitly.
+
+Files stay on this computer and are ignored by Git. They are **not encrypted**. New recording files use restrictive local file permissions where supported. The server accepts loopback connections only and requires a per-process token for write actions; it is not intended for hosting on the internet or a shared LAN.
+
+### Offline spectral analysis
 
 ```bash
-.venv/bin/python scripts/start_muse_stream.py --name Muse-8410
+python scripts/analyze_recording.py recordings/RECORDING_ID.jsonl --output analysis.csv
 ```
 
-You can also use:
+This reprocesses complete, non-overlapping four-second windows using the current algorithm and recorded mains setting. It is **signal-only QC**: live motion gating is not reconstructed, so admission need not match the live display. A trailing partial window is omitted. Existing output files are never overwritten. For reproducible historical results, retain the app commit and pinned numerical environment as well as the recording.
+
+LSL timestamps are not Unix timestamps. Markers are timed at server receipt, with the latest EEG timestamp also stored. These markers are not suitable for laboratory-precision stimulus-onset or ERP experiments.
+
+## Development and verification
 
 ```bash
-.venv/bin/python scripts/start_muse_stream.py --address YOUR_DEVICE_ADDRESS
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+python -m compileall -q apps scripts
+npm run check
+npm test
+
+# Browser integration and screenshots; requires downloading Chromium once.
+python -m pip install -r requirements-browser.txt
+python -m playwright install chromium
+python scripts/smoke_browser.py
 ```
 
-### 3) Start the dashboard server
+The tests use explicitly synthetic fixtures, never a production demo stream. CI checks Python 3.11/3.13, numerical and HTTP behavior, Node transport tests and native browser HTTP/SSE integration. The optional `--offline-browser` harness exercises UI controls through a Python HTTP bridge when browser networking is administratively unavailable; it does not validate native browser SSE. `CHROMIUM_EXECUTABLE` can select a locally installed browser.
 
-```bash
-PYTHONPATH=. .venv/bin/python apps/backend/app.py --host 127.0.0.1 --port 8000 --profile muse-2
-```
+Numerical and direct hardware dependencies are pinned separately. Hardware packages remain optional for tests and the waiting-state dashboard. This is not a complete cross-platform transitive lock; Bluetooth/native library installation must be checked on the target computer.
 
-Then open:
+## Project layout
 
-```text
-http://127.0.0.1:8000
-```
+| File | Responsibility |
+| --- | --- |
+| `apps/backend/muse_lsl_bridge.py` | LSL selection, acquisition, freshness, independent cached analysis |
+| `apps/backend/signal_processing.py` | Welch PSD, integrated bands and explicit QC heuristics |
+| `apps/backend/recording.py` | Bounded asynchronous raw recording and exports |
+| `apps/backend/app.py` | Loopback HTTP/SSE, control validation and static files |
+| `apps/frontend/` | Responsive workstation and SSE-first transport |
+| `scripts/start_muse_stream.py` | Headset-to-LSL launcher |
+| `scripts/analyze_recording.py` | Offline recording-to-band-power CSV |
 
-## Live data model
+This upgrade deliberately introduces **API schema v2** and removes the previous accuracy, plausibility, calm and focus scores. Old scripts consuming the v1 snapshot need updating. See [architecture and limitations](docs/WORKSTATION_UPGRADE.md) and [working guide](docs/guides/WORKING_IN_THIS_REPO.md).
 
-The dashboard uses whatever real LSL streams are available from the headset:
+## Method references
 
-- `EEG` - required for the wave viewer and brain-state analysis
-- `Telemetry` - battery percent, fuel gauge, ADC voltage, and temperature
-- `ACC` - posture and motion stability
-- `GYRO` - stillness and angular-velocity checks
+- [SciPy Welch PSD documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.welch.html)
+- [MuseLSL project and supported hardware](https://github.com/alexandrebarachant/muse-lsl)
+- [MuseLSL telemetry decoder](https://github.com/alexandrebarachant/muse-lsl/blob/master/muselsl/muse.py)
+- [pylsl installation and native library requirements](https://pypi.org/project/pylsl/)
 
-If a stream is missing, that panel stays in a waiting state instead of inventing values.
-
-## Accuracy model
-
-The backend tries to make the rolling band view more trustworthy by combining multiple heuristics rather than trusting raw band power directly.
-
-### Signal preprocessing
-
-- outlier clipping before spectral analysis
-- slow-drift suppression to reduce false delta inflation
-- mains component removal for common 50/60 Hz contamination
-- Hann windowing before per-band DFT accumulation
-
-### Reliability scoring
-
-Per-channel and aggregate trust are influenced by:
-
-- drift leakage
-- spike activity
-- flatline behavior
-- line-noise ratio
-- split-half spectral stability
-- estimated contact quality
-- motion contamination from accelerometer/gyroscope stability
-- stream continuity / timing jitter
-
-### Why this helps
-
-This does not make the app clinically validated, but it does make it much harder for obvious bad windows to look deceptively trustworthy.
-
-## Calibration guidance
-
-Calibration confidence blends:
-
-- sensor fit quality
-- motion stability
-- continuity score
-- delta-dominance warnings
-- telemetry availability
-- battery state
-- line-noise rejection
-- within-window stability
-
-The goal is to flag windows that are internally inconsistent before you trust the overall brain-state surface.
-
-## Verification
-
-```bash
-python3 -m py_compile apps/backend/app.py apps/backend/muse_lsl_bridge.py apps/backend/tests/test_app.py
-node --check apps/frontend/app.js
-python3 -m pytest -q
-python3 scripts/tools/rpg_builder.py --write --rpg-mode minimal --dep-depth 1 --include-tests
-python3 scripts/validate_rpg.py
-```
-
-## Development notes
-
-- The dashboard is intentionally local-first and simple to run.
-- The sensor-fit metric is estimated from EEG behavior; MuseLSL does not provide a dedicated official fit stream in this setup.
-- Motion/orientation outputs are guidance signals, not precise 3D head-tracking.
-- The accuracy stack is heuristic and intended for practical session quality control, not medical interpretation.
-
-## Troubleshooting
-
-- If the dashboard stays in a waiting state, confirm your MuseLSL workflow is actually publishing an `EEG` stream.
-- If telemetry stays blank, your source likely is not publishing `Telemetry`.
-- If the accuracy score is poor, first check contact, then stillness, then nearby power noise and Bluetooth congestion.
-- If delta remains unusually strong, let the headset settle, reseat the sensors, and avoid motion before trusting the combined band view.
+Real Muse 1 Bluetooth, telemetry scaling, lengthy recording and physical disconnect/reconnect checks remain necessary on the target headset. Automated fixtures do not establish clinical validity, electrode impedance accuracy or sensitivity to any particular substance.

@@ -1,0 +1,10 @@
+{
+  "name": "muse-classic-workstation",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test apps/frontend/tests/*.test.mjs",
+    "check": "node --check apps/frontend/app.js && node --check apps/frontend/transport.js"
+  }
+}

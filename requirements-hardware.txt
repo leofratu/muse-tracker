@@ -1,0 +1,4 @@
+-r requirements.txt
+# Optional Bluetooth/LSL stack. A physical-device smoke test is still required.
+muselsl==2.5.3
+pylsl==1.18.5
