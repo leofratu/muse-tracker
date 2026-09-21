@@ -1,141 +1,103 @@
+"""Publish one headset's EEG, telemetry and motion with shared device identity."""
 from __future__ import annotations
 
 import argparse
 import logging
-from time import sleep
-
-from pylsl import StreamInfo, StreamOutlet, local_clock
-
-from muselsl.constants import (
-    LSL_ACC_CHUNK,
-    LSL_EEG_CHUNK,
-    LSL_GYRO_CHUNK,
-    MUSE_NB_ACC_CHANNELS,
-    MUSE_NB_EEG_CHANNELS,
-    MUSE_NB_GYRO_CHANNELS,
-    MUSE_SAMPLING_ACC_RATE,
-    MUSE_SAMPLING_EEG_RATE,
-    MUSE_SAMPLING_GYRO_RATE,
-)
-from muselsl.muse import Muse
-from muselsl.stream import find_muse
+import math
+import time
 
 
-def build_outlet(name: str, stream_type: str, channel_count: int, sample_rate: int, source_id: str, labels: list[str], unit: str, kind: str, chunk_size: int | None = None) -> StreamOutlet:
-    info = StreamInfo(name, stream_type, channel_count, sample_rate, "float32", source_id)
-    info.desc().append_child_value("manufacturer", "Muse")
-    channels = info.desc().append_child("channels")
-    for label in labels:
-        channels.append_child("channel").append_child_value("label", label).append_child_value("unit", unit).append_child_value("type", kind)
-    if chunk_size is None:
-        return StreamOutlet(info)
-    return StreamOutlet(info, chunk_size)
+def telemetry_payload(battery, fuel_gauge, adc, temperature):
+    # muse-lsl decodes battery as packet[1] / 512, already percentage points.
+    # Preserve other decoded values as raw: they are not percentages or volts.
+    values = [float(battery), float(fuel_gauge), float(adc), float(temperature)]
+    if not all(math.isfinite(v) for v in values) or not 0 <= values[0] <= 100:
+        raise ValueError("Invalid Muse telemetry values.")
+    return values
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Start a richer Muse-to-LSL bridge with EEG, telemetry, ACC, and GYRO.")
-    parser.add_argument("--name", default=None, help="Muse device name, for example Muse-8410")
-    parser.add_argument("--address", default=None, help="Muse BLE address")
-    parser.add_argument("--backend", default="bleak", choices=["auto", "bleak", "gatt", "bgapi", "bluemuse"])
+def main():
+    from pylsl import StreamInfo, StreamOutlet, local_clock
+    from muselsl.constants import MUSE_SAMPLING_EEG_RATE, MUSE_SAMPLING_ACC_RATE, MUSE_SAMPLING_GYRO_RATE
+    from muselsl.muse import Muse
+    from muselsl.stream import find_muse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--name")
+    parser.add_argument("--address")
+    parser.add_argument("--profile", choices=["muse-1", "muse-2"], default="muse-1")
+    parser.add_argument("--backend", choices=["auto", "bleak", "gatt", "bgapi", "bluemuse"], default="bleak")
     parser.add_argument("--retries", type=int, default=2)
+    parser.add_argument("--idle-timeout", type=float, default=30)
     args = parser.parse_args()
+    if args.idle_timeout <= 0 or args.retries < 0:
+        parser.error("Timeout must be positive and retries must be nonnegative.")
+    target = {"name": args.name or "Muse", "address": args.address}
+    if not args.address:
+        target = find_muse(args.name, args.backend)
+        if not target:
+            raise SystemExit("No Muse found. Power it on, close other Muse apps, and check Bluetooth permission.")
+    address, name = target["address"], target["name"]
+    model = "Muse 1" if args.profile == "muse-1" else "Muse 2"
 
-    target = {"name": args.name, "address": args.address}
-    if not target["address"]:
-        found = find_muse(args.name, args.backend)
-        if not found:
-            raise SystemExit("Could not find a Muse headset. Make sure it is turned on and nearby.")
-        target = found
+    def outlet(kind, rate, labels, units):
+        info = StreamInfo(f"{model} {kind}", kind, len(labels), rate, "float32", f"Muse{kind if kind != 'EEG' else ''}{address}")
+        info.desc().append_child_value("manufacturer", "Muse")
+        info.desc().append_child_value("device_id", address)
+        channels = info.desc().append_child("channels")
+        for label, unit in zip(labels, units):
+            child = channels.append_child("channel")
+            child.append_child_value("label", label)
+            child.append_child_value("unit", unit)
+            child.append_child_value("type", kind)
+        return StreamOutlet(info)
 
-    address = target["address"]
-    name = target["name"]
-
-    eeg_outlet = build_outlet(
-        name="Muse",
-        stream_type="EEG",
-        channel_count=MUSE_NB_EEG_CHANNELS,
-        sample_rate=MUSE_SAMPLING_EEG_RATE,
-        source_id=f"Muse{address}",
-        labels=["TP9", "AF7", "AF8", "TP10", "Right AUX"],
-        unit="microvolts",
-        kind="EEG",
-        chunk_size=LSL_EEG_CHUNK,
-    )
-    telemetry_outlet = build_outlet(
-        name="MuseTelemetry",
-        stream_type="Telemetry",
-        channel_count=4,
-        sample_rate=0,
-        source_id=f"MuseTelemetry{address}",
-        labels=["battery_percent", "fuel_gauge", "adc_volt", "temperature"],
-        unit="n/a",
-        kind="telemetry",
-    )
-    acc_outlet = build_outlet(
-        name="MuseACC",
-        stream_type="ACC",
-        channel_count=MUSE_NB_ACC_CHANNELS,
-        sample_rate=MUSE_SAMPLING_ACC_RATE,
-        source_id=f"MuseACC{address}",
-        labels=["X", "Y", "Z"],
-        unit="g",
-        kind="accelerometer",
-        chunk_size=LSL_ACC_CHUNK,
-    )
-    gyro_outlet = build_outlet(
-        name="MuseGYRO",
-        stream_type="GYRO",
-        channel_count=MUSE_NB_GYRO_CHANNELS,
-        sample_rate=MUSE_SAMPLING_GYRO_RATE,
-        source_id=f"MuseGYRO{address}",
-        labels=["X", "Y", "Z"],
-        unit="dps",
-        kind="gyroscope",
-        chunk_size=LSL_GYRO_CHUNK,
-    )
+    eeg = outlet("EEG", MUSE_SAMPLING_EEG_RATE, ["TP9", "AF7", "AF8", "TP10", "Right AUX"], ["microvolts"] * 5)
+    telemetry = outlet("Telemetry", 0, ["battery_percent", "fuel_gauge_raw", "adc_raw", "temperature_raw"], ["percent", "raw", "raw", "raw"])
+    acc = outlet("ACC", MUSE_SAMPLING_ACC_RATE, ["X", "Y", "Z"], ["g"] * 3)
+    gyro = outlet("GYRO", MUSE_SAMPLING_GYRO_RATE, ["X", "Y", "Z"], ["dps"] * 3)
+    last_eeg_received = time.monotonic()
 
     def push_eeg(data, timestamps):
-        for index in range(data.shape[1]):
-            eeg_outlet.push_sample(data[:, index], timestamps[index])
+        nonlocal last_eeg_received
+        for index, timestamp in enumerate(timestamps):
+            eeg.push_sample(data[:, index], float(timestamp))
+        last_eeg_received = time.monotonic()
+
+    def push_motion(destination):
+        def callback(data, timestamps):
+            for index, timestamp in enumerate(timestamps):
+                destination.push_sample(data[:, index], float(timestamp))
+        return callback
 
     def push_telemetry(timestamp, battery, fuel_gauge, adc_volt, temperature):
-        telemetry_outlet.push_sample([battery * 100.0, fuel_gauge, adc_volt, temperature], timestamp)
+        try:
+            telemetry.push_sample(telemetry_payload(battery, fuel_gauge, adc_volt, temperature), timestamp)
+        except ValueError as exc:
+            logging.warning("Telemetry rejected: %s", exc)
 
-    def push_acc(data, timestamps):
-        for index in range(data.shape[1]):
-            acc_outlet.push_sample(data[:, index], timestamps[index])
-
-    def push_gyro(data, timestamps):
-        for index in range(data.shape[1]):
-            gyro_outlet.push_sample(data[:, index], timestamps[index])
-
-    muse = Muse(
-        address=address,
-        name=name,
-        callback_eeg=push_eeg,
-        callback_telemetry=push_telemetry,
-        callback_acc=push_acc,
-        callback_gyro=push_gyro,
-        backend=args.backend,
-        time_func=local_clock,
-        log_level=logging.ERROR,
-    )
-
-    if not muse.connect(retries=args.retries):
-        raise SystemExit(f"Failed to connect to Muse headset at {address}.")
-
-    print(f"Connected to {name} ({address})")
-    muse.start()
-    print("Streaming EEG + Telemetry + ACC + GYRO...")
+    muse = Muse(address=address, name=name, callback_eeg=push_eeg, callback_telemetry=push_telemetry,
+                callback_acc=push_motion(acc), callback_gyro=push_motion(gyro), backend=args.backend,
+                time_func=local_clock, log_level=logging.ERROR)
+    connected = False
     try:
-        while local_clock() - muse.last_timestamp < 3600:
-            sleep(1)
+        connected = muse.connect(retries=args.retries)
+        if not connected:
+            raise SystemExit("Could not connect to the Muse headset.")
+        last_eeg_received = time.monotonic()
+        muse.start()
+        print(f"Streaming {model}: EEG, telemetry, accelerometer and gyroscope. Ctrl+C to stop.")
+        while time.monotonic() - last_eeg_received < args.idle_timeout:
+            time.sleep(0.25)
+        print("EEG idle timeout. Restart the launcher after checking the headset.")
     except KeyboardInterrupt:
         pass
     finally:
-        muse.stop()
-        muse.disconnect()
-        print("Disconnected.")
+        if connected:
+            try:
+                muse.stop()
+            finally:
+                muse.disconnect()
 
 
 if __name__ == "__main__":
